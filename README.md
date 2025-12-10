@@ -6,3 +6,4 @@ This is a tentative project to auto-grade students assignments in our programmin
 ## Repository Structure
 - kubernetes: stores files necessary to deploy the components into a Kubernetes cluster
 - scripts: store scripts for testing and automating some tasks
+- grader: web ui for students to interact with in grading assignments
