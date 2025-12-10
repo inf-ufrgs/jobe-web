@@ -1,0 +1,46 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: grader-web
+  namespace: jobe-web
+spec:
+  replicas: 1 # Scale to 2 or 3 for high availability
+  selector:
+    matchLabels:
+      app: grader-web
+  template:
+    metadata:
+      labels:
+        app: grader-web
+    spec:
+      containers:
+      - name: web
+        image: julianowick/ufrgs-grader:v1
+        ports:
+        - containerPort: 8000
+        env:
+        # If you need to change Jobe URL dynamically
+        - name: JOBE_URL
+          value: "http://jobe-service.jobe-web.svc.cluster.local:80/jobe/index.php/restapi/runs"
+        resources:
+          # Limits to ensure it doesn't drain your research cluster
+          limits:
+            memory: "1Gi"
+            cpu: "500m"
+          requests:
+            memory: "256Mi"
+            cpu: "100m"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: grader-service
+  namespace: jobe-web
+spec:
+  selector:
+    app: grader-web
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 8000
+  type: ClusterIP
