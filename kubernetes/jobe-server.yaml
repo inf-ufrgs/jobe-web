@@ -1,0 +1,49 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: jobe-web
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: jobe-server
+  namespace: jobe-web
+  labels:
+    app: jobe
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: jobe
+  template:
+    metadata:
+      labels:
+        app: jobe
+    spec:
+      containers:
+      - name: jobe
+        image: trampgeek/jobeinabox:latest
+        ports:
+        - containerPort: 80
+        resources:
+          # Limits to ensure it doesn't drain your research cluster
+          limits:
+            memory: "1Gi"
+            cpu: "500m"
+          requests:
+            memory: "256Mi"
+            cpu: "100m"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: jobe-service
+  namespace: jobe-web
+spec:
+  selector:
+    app: jobe
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 80
+  type: ClusterIP
