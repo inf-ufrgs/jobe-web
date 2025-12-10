@@ -42,9 +42,9 @@ except Exception as e:
 # 2. Test Cases (Input vs Expected Output)
 # Calculating primes up to 100,000 takes a split second but is noticeable work.
 test_cases = [
-    #{"input": "100",    "expected": "25",   "desc": "Warmup (0-100)"},
-    #{"input": "10000",  "expected": "1229", "desc": "Medium Load (0-10k)"},
-    #{"input": "100000", "expected": "9592", "desc": "Heavy Load (0-100k)"},
+    {"input": "100",    "expected": "25",   "desc": "Warmup (0-100)"},
+    {"input": "10000",  "expected": "1229", "desc": "Medium Load (0-10k)"},
+    {"input": "100000", "expected": "9592", "desc": "Heavy Load (0-100k)"},
     {"input": "1000000", "expected": "78498", "desc": "Very Heavy Load (0-1M)"}
 ]
 
@@ -58,7 +58,10 @@ def run_test():
             "run_spec": {
                 "language_id": "python3",
                 "sourcecode": source_code,
-                "input": test['input']
+                "input": test['input'],
+                "parameters": {
+                    "cputime": 30
+                },
             }
         }
 
@@ -75,7 +78,6 @@ def run_test():
                 continue
 
             result = response.json()
-            print(result)  # Debug: print full result
             
             # Check Jobe Execution Status (15 = Success)
             outcome = result.get('outcome')
