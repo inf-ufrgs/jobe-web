@@ -1,0 +1,16 @@
+{
+  "lab1": {
+    "title": "Lab 1: Sum Two Numbers",
+    "cases": [
+      {"input": "10\n5", "expected": "15"},
+      {"input": "-1\n1", "expected": "0"}
+    ]
+  },
+  "lab2": {
+    "title": "Lab 2: Prime Counter",
+    "cases": [
+      {"input": "10", "expected": "4"},
+      {"input": "20", "expected": "8"}
+    ]
+  }
+}

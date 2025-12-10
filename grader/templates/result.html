@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Submission Results</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body { background-color: #f8f9fa; }
+        .container { max-width: 800px; margin-top: 50px; }
+        .output-box { 
+            background-color: #2d2d2d; 
+            color: #f8f8f2; 
+            padding: 10px; 
+            border-radius: 5px; 
+            font-family: 'Courier New', monospace;
+            font-size: 0.9rem;
+            white-space: pre-wrap; 
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div class="card shadow-sm">
+        
+        <div class="card-header bg-dark text-white p-3 d-flex justify-content-between align-items-center">
+            <h5 class="mb-0">Results for: <span class="fw-light">{{ student_id }}</span></h5>
+            <span class="badge bg-light text-dark fs-6">Score: {{ score }}</span>
+        </div>
+
+        <div class="card-body p-4">
+            <h5 class="card-title mb-3">Test Case Details</h5>
+            
+            <div class="list-group">
+                {% for res in results %}
+                <div class="list-group-item list-group-item-{{ res.css }} mb-2 rounded border">
+                    <div class="d-flex w-100 justify-content-between align-items-center">
+                        <h6 class="mb-1 fw-bold">{{ res.status }}</h6>
+                    </div>
+                    
+                    {% if res.details %}
+                    <div class="mt-2">
+                        <small class="text-muted">Output / Error:</small>
+                        <div class="output-box mt-1">{{ res.details }}</div>
+                    </div>
+                    {% endif %}
+                </div>
+                {% endfor %}
+            </div>
+
+            <div class="mt-4 d-flex justify-content-between">
+                <a href="/" class="btn btn-outline-secondary">← Back to Editor</a>
+                <a href="/" class="btn btn-primary">Try Another Assignment</a>
+            </div>
+        </div>
+    </div>
+</div>
+{{ outcome }}
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>UFRGS Python Grader</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body { background-color: #f8f9fa; }
+        .container { max-width: 800px; margin-top: 50px; }
+        textarea { font-family: 'Courier New', Courier, monospace; font-size: 0.95rem; }
+        .header-brand { background-color: #ce0e2d; color: white; } /* UFRGS Red-ish */
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div class="card shadow-sm">
+        <div class="card-header header-brand p-3">
+            <h4 class="mb-0">🐍 Intro to Python - AutoGrader</h4>
+        </div>
+        <div class="card-body p-4">
+            <form action="/submit" method="post">
+                
+                <div class="mb-4">
+                    <label for="student_id" class="form-label fw-bold">Student ID (Matrícula):</label>
+                    <input type="text" name="student_id" id="student_id" class="form-control" placeholder="00123456" required>
+                    <div class="form-text">Used for logging your submission.</div>
+                </div>
+
+                <div class="mb-4">
+                    <label for="assignment_id" class="form-label fw-bold">Select Assignment:</label>
+                    <select name="assignment_id" id="assignment_id" class="form-select">
+                        {% for id, data in assignments.items() %}
+                        <option value="{{ id }}">{{ data.title }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div class="mb-4">
+                    <label for="code" class="form-label fw-bold">Paste your Python Code:</label>
+                    <textarea name="code" id="code" class="form-control" rows="12" placeholder="a = int(input('Value A: '))&#10;b = int(input('Value B: '))&#10;print(a + b)" required></textarea>
+                </div>
+
+                <div class="d-grid gap-2">
+                    <button type="submit" class="btn btn-dark btn-lg">Run Tests</button>
+                </div>
+
+            </form>
+        </div>
+    </div>
+    <div class="text-center mt-3 text-muted">
+        <small>Powered by UFRGS / Jobe In-a-Box</small>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
