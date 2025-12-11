@@ -23,6 +23,11 @@ JOBE_OUTCOME_MAP = {
     21: "Server Overloaded",
 }
 
+# --- SECURITY CONFIGURATION ---
+# ONLY this ID is allowed to submit code.
+# Later we can expand this to a list or a proper auth system.
+ALLOWED_STUDENT_ID = "00177562"
+
 # --- FASTAPI SETUP ---
 app = FastAPI()
 templates = Jinja2Templates(directory="templates")
@@ -56,6 +61,22 @@ async def submit_code(
     assignment_id: str = Form(...), 
     code: str = Form(...)
 ):
+    # 1. SECURITY CHECK (Hard-coded Auth)
+    # We strip whitespace just in case they added a space by accident
+    if student_id.strip() != ALLOWED_STUDENT_ID:
+        logger.warning(f"UNAUTHORIZED ATTEMPT | Student: {student_id} | IP: {request.client.host}")
+        return HTMLResponse(
+            content=f"""
+            <div style="color: red; font-family: sans-serif; padding: 20px; text-align: center;">
+                <h1>🚫 Access Denied</h1>
+                <p>The Student ID <strong>{student_id}</strong> is not authorized to use this system.</p>
+                <a href="/">Go Back</a>
+            </div>
+            """, 
+            status_code=403
+        )
+
+    # 2. Logging (Authorized)
     client_ip = request.client.host
     logger.info(f"SUBMISSION | Student: {student_id} | Lab: {assignment_id}")
 
