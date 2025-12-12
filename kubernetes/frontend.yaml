@@ -15,7 +15,7 @@ spec:
     spec:
       containers:
       - name: web
-        image: julianowick/ufrgs-grader:v1
+        image: julianowick/jobe-web:v1.1
         ports:
         - containerPort: 8000
         env:
