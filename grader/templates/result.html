@@ -36,7 +36,7 @@
                 {% for res in results %}
                 <div class="list-group-item list-group-item-{{ res.css }} mb-2 rounded border">
                     <div class="d-flex w-100 justify-content-between align-items-center">
-                        <h6 class="mb-1 fw-bold">{{ res.status }}</h6>
+                        <h6 class="mb-1 fw-bold">{{res.name}}: {{ res.status }}</h6>
                     </div>
                     
                     {% if res.details %}
@@ -51,7 +51,6 @@
 
             <div class="mt-4 d-flex justify-content-between">
                 <a href="javascript: history.back()" class="btn btn-outline-secondary">← Voltar ao Editor</a>
-                <a href="/" class="btn btn-primary">Tentar outro exercício</a>
             </div>
         </div>
     </div>

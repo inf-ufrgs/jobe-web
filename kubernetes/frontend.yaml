@@ -22,6 +22,13 @@ spec:
         # If you need to change Jobe URL dynamically
         - name: JOBE_URL
           value: "http://jobe-service.jobe-web.svc.cluster.local:80/jobe/index.php/restapi/runs"
+        - name: GIT_REPO_URL
+          value: "https://github.com/inf-ufrgs/inf01040-assignments.git"
+        - name: GIT_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: git-creds
+              key: token
         resources:
           # Limits to ensure it doesn't drain your research cluster
           limits:
