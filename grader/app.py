@@ -113,6 +113,8 @@ async def lifespan(app: FastAPI):
             logger.info("📂 Assignments folder exists. Updating...")
             try:
                 repo = Repo(ASSIGNMENTS_DIR)
+                # This ensures that if the token changes, the repo updates its config.
+                repo.remotes.origin.set_url(auth_url)
                 repo.remotes.origin.pull()
             except exc.InvalidGitRepositoryError:
                 logger.warning("⚠️ Folder exists but is not a valid git repo. Re-cloning...")
