@@ -15,7 +15,7 @@ spec:
     spec:
       containers:
       - name: web
-        image: julianowick/jobe-web:v1.1
+        image: julianowick/jobe-web:v1.2
         ports:
         - containerPort: 8000
         env:
