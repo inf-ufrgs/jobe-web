@@ -9,8 +9,9 @@ RUN apt-get update && apt-get install -y git && rm -rf /var/lib/apt/lists/*
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy application code
-COPY . .
+# Copy application code file by file
+COPY app.py .
+COPY templates/ ./templates/
 
 # Expose port 8000
 EXPOSE 8000
