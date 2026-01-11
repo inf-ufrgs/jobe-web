@@ -39,7 +39,7 @@
                         <h6 class="mb-1 fw-bold">{{res.name}}: {{ res.status }}</h6>
                     </div>
                     
-                    {% if res.details %}
+                    {% if res.details and res.status != "PASS" %}
                     <div class="mt-2">
                         <small class="text-muted">Saída:</small>
                         <div class="output-box mt-1">{{ res.details }}</div>

@@ -3,7 +3,9 @@ import requests
 import logging
 import shutil         # For clearing invalid git folders
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, Form, HTTPException, Request, Response
+from fastapi import FastAPI, Form, HTTPException, Request, Response, UploadFile, File
+import zipfile
+import shutil
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 from git import Repo, exc
@@ -37,9 +39,12 @@ GIT_TOKEN = os.getenv("GIT_TOKEN")   # The Secret Token
 # ONLY this ID is allowed to submit code.
 # Later we can expand this to a list or a proper auth system.
 ALLOWED_STUDENT_ID = "00177562"
+PROFESSOR_ID = "00177562"
 
-# Configure Logging
-logging.basicConfig(level=logging.INFO)
+# Configure Log Level from Environment
+log_level_str = os.getenv("LOG_LEVEL", "INFO").upper()
+numeric_level = getattr(logging, log_level_str, logging.INFO)
+logging.basicConfig(level=numeric_level)
 logger = logging.getLogger("grader")
 
 # Global State
@@ -95,6 +100,63 @@ def load_assignments_from_disk():
             logger.debug(f"Config: {config}")
     
     return new_assignments
+
+# --- HELPER: The Grading Engine ---
+def grade_submission(code, assignment_id):
+    """
+    Runs the code against the tests for the given assignment.
+    Returns: (score, max_score, results_list)
+    """
+    if assignment_id not in ASSIGNMENTS:
+        return 0, 0, [{"status": "ERROR", "css": "danger", "details": "Problema inválido!"}]
+
+    lab_data = ASSIGNMENTS[assignment_id]
+    tests = lab_data['cases']
+    time_limit = lab_data.get('time_limit', 5)
+    
+    results = []
+    score = 0
+    
+    # Inject wrapper
+    full_code = MOCK_WRAPPER + "\n" + code
+
+    for test in tests:
+        name = test.get('name', 'Test Case')
+        payload = {
+            "run_spec": {
+                "language_id": "python3",
+                "sourcecode": full_code,
+                "input": test['input'] if test['input'] else "",
+                "parameters": {"cputime": time_limit}
+            }
+        }
+        
+        try:
+            # We use a shorter timeout for Python requests to catch hangs
+            resp = requests.post(JOBE_URL, json=payload, timeout=time_limit + 2)
+            
+            if resp.status_code != 200:
+                results.append({"status": "SERVER ERROR", "css": "secondary", "details": f"HTTP {resp.status_code}"})
+                continue
+
+            outcome = resp.json()
+            if outcome['outcome'] == 15:
+                actual = outcome['stdout'].strip()
+                expected = test['output'].strip()
+                if actual.lower() == expected.lower():
+                    results.append({"name": name, "status": "PASS", "css": "success", "details": "OK"})
+                    score += 1
+                else:
+                    results.append({"name": name, "status": "FAIL", "css": "warning", "details": f"{20*'-'} Saída Esperada {20*'-'}\n{expected}\n\n{20*'-'} Saída Recebida {20*'-'}\n{actual}"})
+            else:
+                # Runtime/Syntax Error
+                err = outcome.get('cmpinfo') or outcome.get('stderr') or "Runtime Error"
+                results.append({"name": name, "status": JOBE_OUTCOME_MAP.get(outcome['outcome'], "Error"), "css": "danger", "details": err})
+
+        except Exception as e:
+            results.append({"status": "CONNECTION ERROR", "css": "dark", "details": str(e)})
+
+    return score, len(tests), results
 
 # --- LIFESPAN HANDLER (The New Way) ---
 @asynccontextmanager
@@ -159,7 +221,7 @@ async def favicon():
         </svg>
     """, media_type="image/svg+xml")
 
-# 1. NEW ROOT ROUTE (No Dropdown)
+# 1. ROOT ROUTE
 @app.get("/", response_class=HTMLResponse)
 async def read_root(request: Request):
     return """
@@ -170,19 +232,12 @@ async def read_root(request: Request):
         </body>
     </html>
     """
-# 2. OLD ROOT ROUTE (With Dropdown for manual testing)
-'''
-@app.get("/", response_class=HTMLResponse)
-async def read_root(request: Request):
-    # Pass assignment list to the dropdown
-    return templates.TemplateResponse("index.html", {"request": request, "assignments": ASSIGNMENTS})
-'''
 
-# 3. ASSIGNMENT ROUTE
+# 2. STUDENT ASSIGNMENT ROUTE
 @app.get("/assignment/{assignment_id}", response_class=HTMLResponse)
 async def view_assignment(request: Request, assignment_id: str):
     if assignment_id not in ASSIGNMENTS:
-        logger.warning(f"Assignment not found: {assignment_id}")
+        logger.warning(f"Student assignment not found: {assignment_id}")
         raise HTTPException(status_code=404, detail="Assignment not found. Please check your URL.")
 
     lab_data = ASSIGNMENTS[assignment_id]
@@ -197,7 +252,7 @@ async def view_assignment(request: Request, assignment_id: str):
         "author": lab_data.get('author')
     })
 
-# 4. SUBMISSION ROUTE
+# 3. STUDENT SUBMISSION ROUTE
 @app.post("/submit", response_class=HTMLResponse)
 async def submit_code(
     request: Request, 
@@ -207,8 +262,9 @@ async def submit_code(
 ):
     # 1. SECURITY CHECK (Hard-coded Auth)
     # We strip whitespace just in case they added a space by accident
+    client_ip = request.client.host
     if student_id.strip() != ALLOWED_STUDENT_ID:
-        logger.warning(f"UNAUTHORIZED ATTEMPT | Student: {student_id} | IP: {request.client.host}")
+        logger.warning(f"UNAUTHORIZED ATTEMPT | Student: {student_id} | IP: {client_ip}")
         return HTMLResponse(
             content=f"""
             <div style="color: red; font-family: sans-serif; padding: 20px; text-align: center;">
@@ -221,89 +277,130 @@ async def submit_code(
         )
 
     # 2. Logging (Authorized)
-    client_ip = request.client.host
-    logger.info(f"SUBMISSION | Student: {student_id} | Assignment: {assignment_id}")
+    logger.info(f"SUBMISSION | Student: {student_id} | Assignment: {assignment_id} | IP: {client_ip}")
 
-    if assignment_id not in ASSIGNMENTS:
-        return HTMLResponse("Invalid Assignment ID", status_code=400)
+    # 3. CALL THE HELPER
+    score, total, results = grade_submission(code, assignment_id)
 
-    tests = ASSIGNMENTS[assignment_id]['cases']
-    results = []
-    score = 0
-    
-    # Inject wrapper before student code
-    full_code = MOCK_WRAPPER + "\n" + code
-
-    for i, test in enumerate(tests):
-        payload = {
-            "run_spec": {
-                "language_id": "python3",
-                "sourcecode": full_code,
-                "input": test['input']
-            }
-        }
-        
-        try:
-            resp = requests.post(JOBE_URL, json=payload, timeout=6)
-            
-            if resp.status_code != 200:
-                results.append({
-                    "status": "SERVER ERROR", 
-                    "css": "secondary", 
-                    "details": f"Jobe returned HTTP {resp.status_code}"
-                })
-                continue
-
-            outcome_data = resp.json()
-            outcome_code = outcome_data['outcome']
-            outcome_desc = JOBE_OUTCOME_MAP.get(outcome_code, f"Unknown Error ({outcome_code})")
-            
-            # 1. CHECK EXECUTION HEALTH
-            if outcome_code != 15:
-                # If it didn't run successfully (Crashed, Timeout, etc)
-                # 'cmpinfo' usually holds Python tracebacks or SyntaxErrors
-                error_details = outcome_data.get('cmpinfo', '') 
-                
-                # Fallback: sometimes Jobe puts runtime errors in stdout or stderr
-                if not error_details:
-                     error_details = outcome_data.get('stderr', '')
-
-                results.append({
-                    "name": test['name'],
-                    "status": outcome_desc, # e.g. "Runtime Error"
-                    "css": "warning", 
-                    "details": error_details # e.g. "ZeroDivisionError..."
-                })
-                continue
-
-            # 2. CHECK LOGIC (Only if execution was successful)
-            actual = outcome_data['stdout'].strip()
-            expected = test['output'].strip()
-            
-            if actual == expected:
-                results.append({
-                    "name": test['name'],
-                    "status": "PASS", 
-                    "css": "success", 
-                    "details": f"Output: {actual}"
-                })
-                score += 1
-            else:
-                results.append({
-                    "name": test['name'],
-                    "status": "FAIL", 
-                    "css": "danger", 
-                    "details": f"Expected:\n{expected}\n\nGot:\n{actual}"
-                })
-
-        except Exception as e:
-            logger.error(f"Connection error during submission: {e}{type(e)}")
-            results.append({"status": "CONNECTION ERROR", "css": "dark", "details": str(e)})
-
+    # 4. RETURN RESPONSE
     return templates.TemplateResponse("result.html", {
-        "request": request,
+        "request": request, 
         "results": results, 
-        "score": f"{score}/{len(tests)}",
+        "score": f"{score}/{total}",
         "student_id": student_id,
-        "total": len(tests)
+        "assignment_id": assignment_id
+    })
+
+# 4. PROFESSOR ASSIGNMENT ROUTE
+@app.get("/professor/{assignment_id}", response_class=HTMLResponse)
+async def professor_upload_page(request: Request, assignment_id: str):
+    """
+    Renders the upload page SPECIFIC to one assignment.
+    """
+    if assignment_id not in ASSIGNMENTS:
+        logger.warning(f"Professor assignment not found: {assignment_id}")
+        raise HTTPException(status_code=404, detail="Assignment not found")
+
+    lab_data = ASSIGNMENTS[assignment_id]
+
+    return templates.TemplateResponse("professor_upload.html", {
+        "request": request,
+        "assignment_id": assignment_id,
+        "title": lab_data['title']
+    })
+
+# 5. PROFESSOR SUBMISSION ROUTE
+@app.post("/professor/grade", response_class=HTMLResponse)
+async def professor_grade(
+    request: Request,
+    prof_id: str = Form(...),
+    assignment_id: str = Form(...),
+    zip_file: UploadFile = File(...)
+):
+    # 1. Auth Check
+    if prof_id != PROFESSOR_ID:
+        return HTMLResponse("<h1>🚫 Access Denied</h1>", status_code=403)
+
+    # 2. Setup Temp Directory
+    # We use a random suffix or timestamp to prevent collisions if two TAs grade at once
+    import uuid
+    run_id = str(uuid.uuid4())[:8]
+    temp_dir = f"/tmp/grade_{assignment_id}_{run_id}"
+    
+    if os.path.exists(temp_dir): shutil.rmtree(temp_dir)
+    os.makedirs(temp_dir)
+    
+    zip_path = f"{temp_dir}/submissions.zip"
+    with open(zip_path, "wb") as buffer:
+        shutil.copyfileobj(zip_file.file, buffer)
+        
+    try:
+        with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+            zip_ref.extractall(temp_dir)
+    except zipfile.BadZipFile:
+        return HTMLResponse("Error: Invalid ZIP file", status_code=400)
+
+    # 3. Iterate through Folders (The "Moodle Parser")
+    report_data = []
+    
+    # Walk through the extracted folder
+    # Look for folders that match the pattern "Name_ID_..."
+    extracted_root = temp_dir
+    
+    # Sometimes parsing creates a subfolder, so we check root contents
+    items = os.listdir(extracted_root)
+    
+    for i, item in enumerate(sorted(items)):
+        student_dir = os.path.join(extracted_root, item)
+        
+        # Skip the zip file itself and __MACOSX junk
+        if not os.path.isdir(student_dir) or item.startswith("__"):
+            continue
+
+        # Extract Name (Assumption: "Name_ID_...")
+        parts = item.split('_')
+        student_name = parts[0]
+        
+        # Find Python Files
+        py_files = [f for f in os.listdir(student_dir) if f.endswith(".py")]
+        
+        student_status = {}
+        
+        if not py_files:
+            student_status = {"name": student_name, "has_warning": 0, "score": "0", "status": "No File", "css": "secondary"}
+        else:
+            # Pick the first one
+            target_file = py_files[0]
+            warning = f"(Found {len(py_files)} files)" if len(py_files) > 1 else ""
+            
+            with open(os.path.join(student_dir, target_file), "r", encoding="utf-8", errors="ignore") as f:
+                code_content = f.read()
+            
+            # --- RUN THE GRADER ---
+            score, total, results = grade_submission(code_content, assignment_id)
+            
+            # Calculate Pass/Fail CSS
+            row_css = "success" if score == total else ("warning" if score > 0 else "danger")
+            
+            # Inside the professor_grade loop in app.py:
+
+            student_status = {
+                "id": f"student_{i}",  # Unique ID for the HTML collapse target
+                "name": student_name,
+                "has_warning": len(py_files),  # Lenght of py_files for warning display should be always 1
+                "score": f"{score}/{total}",
+                "css": row_css,  # "success", "danger", or "warning"
+                "code_content": code_content,
+                "results": results # The list of test outcomes
+            }
+
+        report_data.append(student_status)
+
+    # Cleanup
+    shutil.rmtree(temp_dir)
+
+    return templates.TemplateResponse("professor_report.html", {
+        "request": request,
+        "report": report_data,
+        "assignment": ASSIGNMENTS[assignment_id]['title']
     })
