@@ -35,12 +35,6 @@ ASSIGNMENTS_DIR = "./assignments"
 REPO_URL = os.getenv("GIT_REPO_URL", DEFAULT_REPO_URL) # e.g. https://github.com/inf-ufrgs/inf01040-assignments.git
 GIT_TOKEN = os.getenv("GIT_TOKEN")   # The Secret Token
 
-# --- SECURITY CONFIGURATION ---
-# ONLY this ID is allowed to submit code.
-# Later we can expand this to a list or a proper auth system.
-ALLOWED_STUDENT_ID = "00177562"
-PROFESSOR_ID = "00177562"
-
 # Configure Log Level from Environment
 log_level_str = os.getenv("LOG_LEVEL", "INFO").upper()
 numeric_level = getattr(logging, log_level_str, logging.INFO)
@@ -49,6 +43,10 @@ logger = logging.getLogger("grader")
 
 # Global State
 ASSIGNMENTS = {}
+AUTHORIZED_USERS = {
+    "students": set(),
+    "professors": set()
+}
 
 # --- HELPER FUNCTIONS ---
 def load_assignments_from_disk():
@@ -96,10 +94,36 @@ def load_assignments_from_disk():
                 "author": config["author"],
                 "cases": config["tests"]
             }
-            logger.info(f"Loaded assignment: {lab_id} with {len(config['tests'])} test cases.")
+            logger.debug(f"Loaded assignment: {lab_id} with {len(config['tests'])} test cases.")
             logger.debug(f"Config: {config}")
     
     return new_assignments
+
+# --- HELPER: Load Users ---
+def load_users_from_disk():
+    """Reads users.yaml and returns a dict of sets"""
+    users_path = os.path.join(ASSIGNMENTS_DIR, "users.yaml")
+    data = {"students": set(), "professors": set()}
+    
+    if os.path.exists(users_path):
+        try:
+            with open(users_path, 'r') as f:
+                raw = yaml.safe_load(f) or {}
+                
+                # Convert lists to sets for O(1) lookup speed
+                # usage of str() ensures we don't have integer/string mismatches
+                if "students" in raw:
+                    data["students"] = set(str(u) for u in raw["students"])
+                
+                if "professors" in raw:
+                    data["professors"] = set(str(u) for u in raw["professors"])
+                    
+        except Exception as e:
+            logger.error(f"❌ Error loading users.yaml: {e}")
+    else:
+        logger.warning("⚠️ users.yaml not found. Authentication might fail.")
+        
+    return data
 
 # --- HELPER: The Grading Engine ---
 def grade_submission(code, assignment_id):
@@ -165,7 +189,7 @@ async def lifespan(app: FastAPI):
     logger.info("🚀 Grader App Starting Up...")
     logger.info(f"🔗 Jobe Backend at: {JOBE_URL}")
 
-    global ASSIGNMENTS
+    global ASSIGNMENTS, AUTHORIZED_USERS
 
     if REPO_URL and GIT_TOKEN:
         # Construct Authenticated URL safely
@@ -186,8 +210,11 @@ async def lifespan(app: FastAPI):
             logger.info("📥 Cloning Private Repository...")
             Repo.clone_from(auth_url, ASSIGNMENTS_DIR)
             
+        # Load Assignments and Users
         ASSIGNMENTS = load_assignments_from_disk()
         logger.info(f"📚 Loaded {len(ASSIGNMENTS)} assignments from Git.")
+        AUTHORIZED_USERS = load_users_from_disk()
+        logger.info(f"👥 Loaded {len(AUTHORIZED_USERS['students'])} students and {len(AUTHORIZED_USERS['professors'])} professors.")
     else:
         logger.warning("⚠️ No GIT credentials provided. Using empty assignment list.")
     
@@ -260,10 +287,10 @@ async def submit_code(
     assignment_id: str = Form(...), 
     code: str = Form(...)
 ):
-    # 1. SECURITY CHECK (Hard-coded Auth)
+    # 1. SECURITY CHECK
     # We strip whitespace just in case they added a space by accident
     client_ip = request.client.host
-    if student_id.strip() != ALLOWED_STUDENT_ID:
+    if student_id.strip() not in AUTHORIZED_USERS["students"] and student_id.strip() not in AUTHORIZED_USERS["professors"]:
         logger.warning(f"UNAUTHORIZED ATTEMPT | Student: {student_id} | IP: {client_ip}")
         return HTMLResponse(
             content=f"""
@@ -318,7 +345,7 @@ async def professor_grade(
     zip_file: UploadFile = File(...)
 ):
     # 1. Auth Check
-    if prof_id != PROFESSOR_ID:
+    if prof_id.strip() not in AUTHORIZED_USERS["professors"]:
         return HTMLResponse("<h1>🚫 Access Denied</h1>", status_code=403)
 
     # 2. Setup Temp Directory
