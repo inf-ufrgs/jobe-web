@@ -6,7 +6,7 @@ This is a tentative project to auto-grade students assignments in our programmin
 ## Repository Structure
 - kubernetes: stores files necessary to deploy the components into a Kubernetes cluster
 - scripts: store scripts for testing and automating some tasks
-- grader: web ui for students to interact with in grading assignments
+- grader: web ui for students and professors to interact with in grading assignments
 
 ## Deployment considerations
 The web interface is designed to work with a Jobe server instance. You need to have a running Jobe server and configure the web interface to connect to it. In this repository, you can find a sample configuration file at the `kubernetes` folder.
