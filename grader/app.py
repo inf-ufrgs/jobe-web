@@ -6,6 +6,9 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Form, HTTPException, Request, Response, UploadFile, File
 import zipfile
 import shutil
+import difflib
+import itertools
+import uuid # To generate unique IDs for the HTML accordion
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 from git import Repo, exc
@@ -181,6 +184,50 @@ def grade_submission(code, assignment_id):
             results.append({"status": "CONNECTION ERROR", "css": "dark", "details": str(e)})
 
     return score, len(tests), results
+
+# --- HELPER: Similarity check functions
+
+def normalize_code(code: str) -> str:
+    """
+    Removes whitespace and comments to compare the 'skeleton' of the logic.
+    This is a cheap way to stop students who just add spaces to fool the system.
+    """
+    # Simple normalization: remove lines starting with # and strip whitespace
+    lines = [line.strip() for line in code.splitlines() if line.strip() and not line.strip().startswith("#")]
+    return "\n".join(lines)
+
+def check_similarity(submissions: list) -> list:
+    """
+    submissions: List of dicts [{'name': 'Ana', 'code': '...'}, ...]
+    """
+    suspicious_pairs = []
+    
+    # 1. Pre-compute normalized code
+    for sub in submissions:
+        sub['norm_code'] = normalize_code(sub['code'])
+
+    # 2. Compare pairs
+    for sub_a, sub_b in itertools.combinations(submissions, 2):
+        if sub_a['norm_code'] == sub_b['norm_code']:
+            ratio = 1.0
+        else:
+            matcher = difflib.SequenceMatcher(None, sub_a['norm_code'], sub_b['norm_code'])
+            ratio = matcher.ratio()
+
+        if ratio > 0.8: # Threshold
+            suspicious_pairs.append({
+                "id": f"sus_{uuid.uuid4().hex[:8]}", # Unique ID for Bootstrap collapse
+                "student1": sub_a['name'],
+                "student2": sub_b['name'],
+                "code1": sub_a['code'],  # <--- Include Source A
+                "code2": sub_b['code'],  # <--- Include Source B
+                "ratio": round(ratio * 100, 1)
+            })
+
+    # Sort by highest similarity
+    suspicious_pairs.sort(key=lambda x: x['ratio'], reverse=True)
+    
+    return suspicious_pairs
 
 # --- LIFESPAN HANDLER (The New Way) ---
 @asynccontextmanager
@@ -426,8 +473,22 @@ async def professor_grade(
     # Cleanup
     shutil.rmtree(temp_dir)
 
+    # 1. Collect all valid codes for plagiarism check
+    class_submissions = []
+    for item in report_data:
+        if item.get('code_content'):
+            class_submissions.append({
+                "name": item['name'],
+                "code": item['code_content']
+            })
+
+    # 2. Run the Check
+    plagiarism_report = check_similarity(class_submissions)
+
+    # 3. Pass to Template
     return templates.TemplateResponse("professor_report.html", {
         "request": request,
         "report": report_data,
+        "plagiarism": plagiarism_report,
         "assignment": ASSIGNMENTS[assignment_id]['title']
     })

@@ -33,6 +33,30 @@
             padding: 5px;
             border-radius: 3px;
         }
+        
+        /* Side-by-Side Code Diff Styling */
+        .diff-container {
+            background-color: #fff0f0; /* Light red tint for alert feeling */
+            border: 1px solid #f5c6cb;
+            padding: 15px;
+        }
+        .diff-box {
+            background-color: #2d2d2d; /* Dark theme */
+            color: #f8f8f2;
+            border: 1px solid #444;
+            border-radius: 4px;
+            padding: 10px;
+            max-height: 400px; /* Fixed height */
+            overflow-y: auto;  /* Scrollable */
+            font-size: 0.8rem;
+            font-family: 'Courier New', monospace;
+            white-space: pre;  /* Keep formatting */
+        }
+        /* Highlight the clicked row */
+        .table-danger.clickable:hover {
+            background-color: #f1b0b7;
+            cursor: pointer;
+        }
     </style>
 </head>
 <body>
@@ -129,6 +153,67 @@
     <div class="mt-3 text-muted small">
         <p>* Indicates that the student submitted multiple files or no Python files. Only one file is graded.</p>
     </div>
+    
+    {% if plagiarism %}
+    <div class="card border-danger shadow-sm mb-5">
+        <div class="card-header bg-danger text-white d-flex justify-content-between align-items-center">
+            <h5 class="mb-0">🚨 Potential Plagiarism Detected</h5>
+            <span class="badge bg-white text-danger">{{ plagiarism|length }} Pairs Found</span>
+        </div>
+        <div class="card-body p-0">
+            <table class="table table-hover mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th style="width: 35%">Student A</th>
+                        <th style="width: 35%">Student B</th>
+                        <th style="width: 20%">Similarity</th>
+                        <th style="width: 10%">Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for pair in plagiarism %}
+                    <tr class="table-danger clickable" data-bs-toggle="collapse" data-bs-target="#{{ pair.id }}" aria-expanded="false">
+                        <td class="fw-bold">{{ pair.student1 }}</td>
+                        <td class="fw-bold">{{ pair.student2 }}</td>
+                        <td>
+                            <div class="progress" style="height: 20px;">
+                                <div class="progress-bar bg-danger" role="progressbar" style="width: {{ pair.ratio }}%;">
+                                    {{ pair.ratio }}%
+                                </div>
+                            </div>
+                        </td>
+                        <td><button class="btn btn-sm btn-outline-danger">Compare ▼</button></td>
+                    </tr>
+                    <tr>
+                        <td colspan="4" class="p-0 border-0">
+                            <div id="{{ pair.id }}" class="collapse">
+                                <div class="diff-container">
+                                    <div class="row">
+                                        
+                                        <div class="col-md-6">
+                                            <h6 class="text-danger fw-bold">{{ pair.student1 }}</h6>
+                                            <pre><code class="language-python diff-box">{{ pair.code1 }}</code></pre>
+                                        </div>
+
+                                        <div class="col-md-6">
+                                            <h6 class="text-danger fw-bold">{{ pair.student2 }}</h6>
+                                            <pre><code class="language-python diff-box">{{ pair.code2 }}</code></pre>
+                                        </div>
+
+                                    </div>
+                                    <div class="text-center mt-2">
+                                        <small class="text-muted">Visually check for identical logic, distinct variable names, or AI-generated comments.</small>
+                                    </div>
+                                </div>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% endif %}
 
 </div>
 
