@@ -462,7 +462,7 @@ async def professor_grade(
                 "id": f"student_{i}",  # Unique ID for the HTML collapse target
                 "name": student_name,
                 "has_warning": len(py_files),  # Lenght of py_files for warning display should be always 1
-                "score": f"{score}/{total}",
+                "score": f"{score}/{total} ({score/total*100:.1f}%)",
                 "css": row_css,  # "success", "danger", or "warning"
                 "code_content": code_content,
                 "results": results # The list of test outcomes
