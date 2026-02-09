@@ -342,9 +342,9 @@ async def submit_code(
         return HTMLResponse(
             content=f"""
             <div style="color: red; font-family: sans-serif; padding: 20px; text-align: center;">
-                <h1>🚫 Access Denied</h1>
-                <p>The Student ID <strong>{student_id}</strong> is not authorized to use this system.</p>
-                <a href="javascript: history.back()">Go Back</a>
+                <h1>🚫 Acesso Negado</h1>
+                <p>O estudante Matrícula <strong>{student_id}</strong> não tem autorização para acessar o sistema. Verifique se a matrícula está correta ou entre em contato com o professor.</p>
+                <a href="javascript: history.back()">Voltar</a>
             </div>
             """, 
             status_code=403
