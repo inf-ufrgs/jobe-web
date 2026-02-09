@@ -360,7 +360,7 @@ async def submit_code(
     return templates.TemplateResponse("result.html", {
         "request": request, 
         "results": results, 
-        "score": f"{score}/{total}",
+        "score": f"{score}/{total} ({score/total*100:.1f}%)",
         "student_id": student_id,
         "assignment_id": assignment_id
     })
