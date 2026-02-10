@@ -6,3 +6,4 @@ python-multipart
 GitPython
 PyYAML
 markdown
+pymdown-extensions

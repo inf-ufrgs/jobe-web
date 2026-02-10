@@ -71,7 +71,21 @@ def load_assignments_from_disk():
         description_html = "<p>No description available.</p>"
         if os.path.exists(readme_path):
             with open(readme_path, 'r') as f:
-                description_html = markdown.markdown(f.read(), extensions=['fenced_code', 'codehilite', 'tables'])
+                description_html = markdown.markdown(
+                    f.read(), 
+                    extensions=[
+                        'fenced_code', 
+                        'codehilite', 
+                        'tables', 
+                        'pymdownx.arithmatex',  # Math support to display equations properly
+                        'pymdownx.betterem'     # Better bold/italic handling
+                    ],
+                    extension_configs={
+                        'pymdownx.arithmatex': {
+                            'generic': True,  # Use generic HTML wrapper
+                        }
+                    }
+                )
         else:
             logger.warning(f"README.md not found for {lab_id}")
         # 2. Load Config
