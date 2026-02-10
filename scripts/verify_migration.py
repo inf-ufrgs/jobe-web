@@ -11,7 +11,7 @@ init(autoreset=True)
 # --- CONFIGURATION ---
 ASSIGNMENTS_DIR = "./grader/assignments"
 JOBE_URL = os.getenv("JOBE_URL", "http://localhost:4000/jobe/index.php/restapi/runs")
-CONCURRENT_ASSIGNMENTS = 5  # How many assignments to check at the same time
+CONCURRENT_ASSIGNMENTS = 10  # How many assignments to check at the same time
 
 # --- THE MOCK WRAPPER (Must match your app.py exactly) ---
 MOCK_WRAPPER = """
@@ -80,7 +80,12 @@ async def run_test_case(client, code, test, time_limit):
     }
 
     try:
-        resp = await client.post(JOBE_URL, json=payload, timeout=time_limit + 5)
+        resp = await client.post(
+            JOBE_URL, 
+            json=payload, 
+            timeout=time_limit + 5,
+            headers={"Connection": "close"} # Ensure we don't keep connections open to Jobe for load balancing
+        )
         if resp.status_code != 200:
             return {"status": "ERROR", "msg": f"Jobe Error {resp.status_code}"}
         
