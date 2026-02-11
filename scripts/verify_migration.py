@@ -11,44 +11,15 @@ init(autoreset=True)
 # --- CONFIGURATION ---
 ASSIGNMENTS_DIR = "./grader/assignments"
 JOBE_URL = os.getenv("JOBE_URL", "http://localhost:4000/jobe/index.php/restapi/runs")
-CONCURRENT_ASSIGNMENTS = 10  # How many assignments to check at the same time
+CONCURRENT_ASSIGNMENTS = 3  # How many assignments to check at the same time
 
-# --- THE MOCK WRAPPER (Must match your app.py exactly) ---
+# The Wrapper to silence inputs
 MOCK_WRAPPER = """
 import sys
-from io import StringIO
-
-class MockInput:
-    def __init__(self, input_data):
-        self.input_lines = input_data.strip().split('\\n')
-        self.line_index = 0
-
-    def mock_input_func(self, prompt=""):
-        if prompt:
-            print(prompt, end="")
-        if self.line_index < len(self.input_lines):
-            line = self.input_lines[self.line_index]
-            self.line_index += 1
-            return line
-        raise EOFError("No more input data")
-
-def run_with_mock(code_str, input_str):
-    mock = MockInput(input_str)
-    global input
-    input = mock.mock_input_func
-    
-    # Capture Stdout
-    old_stdout = sys.stdout
-    sys.stdout = mystdout = StringIO()
-    
-    try:
-        exec(code_str, globals())
-    except Exception as e:
-        print(f"Runtime Error: {e}")
-    finally:
-        sys.stdout = old_stdout
-    
-    return mystdout.getvalue()
+def input(prompt=None):
+    line = sys.stdin.readline()
+    if not line: return ""
+    return line.strip()
 """
 
 async def run_test_case(client, code, test, time_limit):
@@ -69,7 +40,15 @@ async def run_test_case(client, code, test, time_limit):
     # Let's trust the logic you implemented in `grade_submission`.
     
     full_code = MOCK_WRAPPER + "\n" + code
-
+    
+    if type(test['input']) is not str:
+        print(f"⚠️  Input is not a string: {test['input']} (type: {type(test['input'])})")
+        test['input'] = str(test['input'])  # Convert to string
+    
+    # Add a \n to the end of input if it's not there yet, since Jobe sends input via stdin
+    if not test['input'].endswith("\n"):
+        test['input'] += "\n"
+    
     payload = {
         "run_spec": {
             "language_id": "python3",
@@ -104,7 +83,7 @@ async def run_test_case(client, code, test, time_limit):
                 }
         else:
             err = outcome.get('stderr') or outcome.get('cmpinfo') or "Runtime Error"
-            return {"status": "ERROR", "msg": err.strip()}
+            return {"status": "ERROR", "msg": err.strip() + f" - Input: {payload['run_spec']['input']} of type {type(payload['run_spec']['input'])}"}
             
     except Exception as e:
         return {"status": "CONN_ERR", "msg": str(e)}
