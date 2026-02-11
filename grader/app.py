@@ -163,11 +163,18 @@ def grade_submission(code, assignment_id):
 
     for test in tests:
         name = test.get('name', 'Test Case')
+        # Make sure input is always a string, since Jobe expects input via stdin and an integer 0 would be treated as empty.
+        if type(test['input']) is not str:
+            logger.warning(f"⚠️ Test case input is not a string: {test['input']} (type: {type(test['input'])}). Converting to string...")
+            test['input'] = str(test['input'])  # Convert to string
+        # Add a \n to the end of input if it's not there yet, since Jobe sends input via stdin
+        if not test['input'].endswith("\n"):
+            test['input'] += "\n"
         payload = {
             "run_spec": {
                 "language_id": "python3",
                 "sourcecode": full_code,
-                "input": test['input'] if test['input'] else "",
+                "input": test['input'],
                 "parameters": {"cputime": time_limit}
             }
         }

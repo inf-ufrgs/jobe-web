@@ -43,7 +43,8 @@
     <script>
     window.MathJax = {
         tex: {
-            inlineMath: [['$', '$'], ['\\(', '\\)']],
+            //inlineMath: [['$', '$'], ['\\(', '\\)']], -- Original delimiters that caused issues with Markdown dollar signs
+            inlineMath: [['\\(', '\\)']],
             displayMath: [['$$', '$$'], ['\\[', '\\]']],
             processEscapes: true
         },
