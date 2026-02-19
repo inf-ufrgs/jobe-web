@@ -111,8 +111,9 @@ PROBLEM_IDS = [
     # 2284, # EP10-A - Data com mês por extenso
     # 2285, # EP10-B - Valor da prestação
     # 2286, # EP10-C - Correspondência de dígitos
-    # 2321, # EP11-C - Cifra de César
+    2319, # EP11-A - Tabuada
     # 2320, # EP11-B - Círculo circunscrito em um retângulo
+    # 2321, # EP11-C - Cifra de César
     # 2338, # EP11-D - Código Morse
     # 2290, # EP13-A - Conjunto de inteiros
     # 2291, # EP13-B - Adição de Frações
@@ -121,11 +122,11 @@ PROBLEM_IDS = [
     # 2394, # EP14-B - Recolhimento de imposto
     # 2395, # EP14-C - Cartões de mensagens
     # 2700, # EP14-D - Mês do Inventário UFRGS: A Batalha Final
-    3654, # EP14-E - Sistema de Registro Acadêmico
-    4077, # LAB09-D - Convertendo Valores (PISA 2022)
-    4078, # LAB09-E - Inflação Mensal e Anual
-    4158, # LAB13-E - Lista de Compras
-    4159, # LAB13-D - Sistema de RH
+    # 3654, # EP14-E - Sistema de Registro Acadêmico
+    # 4077, # LAB09-D - Convertendo Valores (PISA 2022)
+    # 4078, # LAB09-E - Inflação Mensal e Anual
+    # 4158, # LAB13-E - Lista de Compras
+    # 4159, # LAB13-D - Sistema de RH
 ]
 
 OUTPUT_DIR = "./assignments_imported"
