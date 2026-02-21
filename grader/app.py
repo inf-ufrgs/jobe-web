@@ -14,6 +14,8 @@ from fastapi.templating import Jinja2Templates
 from git import Repo, exc
 import markdown
 import yaml
+from datetime import datetime
+import asyncio
 
 # --- CONFIGURATION ---
 # 1. Get Jobe URL from Environment (Default to localhost for testing)
@@ -50,6 +52,7 @@ AUTHORIZED_USERS = {
     "students": set(),
     "professors": set()
 }
+LAST_UPDATED = "Never"
 
 # --- HELPER FUNCTIONS ---
 def load_assignments_from_disk():
@@ -180,8 +183,8 @@ def grade_submission(code, assignment_id):
         }
         
         try:
-            # We use a shorter timeout for Python requests to catch hangs
-            resp = requests.post(JOBE_URL, json=payload, timeout=time_limit + 2)
+            # 1. ACTUAL JOBE REQUEST
+            resp = requests.post(JOBE_URL, json=payload, timeout=time_limit + 5)
             
             if resp.status_code != 200:
                 results.append({"status": "SERVER ERROR", "css": "secondary", "details": f"HTTP {resp.status_code}"})
@@ -195,7 +198,24 @@ def grade_submission(code, assignment_id):
                     results.append({"name": name, "status": "PASS", "css": "success", "details": "OK"})
                     score += 1
                 else:
-                    results.append({"name": name, "status": "FAIL", "css": "warning", "details": f"{20*'-'} Saída Esperada {20*'-'}\n{expected}\n\n{20*'-'} Saída Recebida {20*'-'}\n{actual}"})
+                    # Generate a unified diff
+                    expected_lines = [line + "\n" for line in expected.splitlines()]
+                    actual_lines = [line + "\n" for line in actual.splitlines()]
+                    diff_str = "".join(difflib.unified_diff(
+                        expected_lines,
+                        actual_lines,
+                        fromfile="Esperada",
+                        tofile="Recebida",
+                        n=3
+                    ))
+                    
+                    results.append({
+                        "name": name, 
+                        "status": "FAIL", 
+                        "css": "warning", 
+                        "details": f"{20*'-'} Saída Esperada {20*'-'}\n{expected}\n\n{20*'-'} Saída Recebida {20*'-'}\n{actual}",
+                        "diff": diff_str
+                    })
             else:
                 # Runtime/Syntax Error
                 err = outcome.get('cmpinfo') or outcome.get('stderr') or "Runtime Error"
@@ -207,7 +227,6 @@ def grade_submission(code, assignment_id):
     return score, len(tests), results
 
 # --- HELPER: Similarity check functions
-
 def normalize_code(code: str) -> str:
     """
     Removes whitespace and comments to compare the 'skeleton' of the logic.
@@ -250,6 +269,61 @@ def check_similarity(submissions: list) -> list:
     
     return suspicious_pairs
 
+# --- HELPER: The Sync Engine ---
+def sync_repository():
+    """Pulls latest code and reloads RAM. Runs in all replicas."""
+    global ASSIGNMENTS, AUTHORIZED_USERS, LAST_UPDATED
+    
+    if not os.path.exists(ASSIGNMENTS_DIR):
+        return
+
+    should_reload = False
+
+    if LAST_UPDATED == "Never":
+        should_reload = True
+
+    try:
+        repo = Repo(ASSIGNMENTS_DIR)
+        
+        # 1. Fetch the latest metadata from GitHub
+        repo.remotes.origin.fetch()
+        
+        # 2. Check if local commit matches remote commit
+        local_commit = repo.head.commit
+        remote_commit = repo.remotes.origin.refs.main.commit # Change 'main' if your default branch is 'master'
+        
+        if local_commit != remote_commit:
+            logger.info("🔄 New commits detected on GitHub! Pulling...")
+            
+            # Re-apply the auth URL just to be safe before pulling
+            # Construct Authenticated URL safely
+            auth_url = REPO_URL.replace("https://", f"https://{GIT_TOKEN}@")
+            if auth_url:
+                repo.remotes.origin.set_url(auth_url)
+            
+            repo.remotes.origin.pull()
+            should_reload = True
+            
+    except Exception as e:
+        logger.error(f"❌ Auto-sync failed: {e}")
+
+    if should_reload:
+        ASSIGNMENTS = load_assignments_from_disk()
+        logger.info(f"📚 Loaded {len(ASSIGNMENTS)} assignments from disk.")
+        AUTHORIZED_USERS = load_users_from_disk()
+        logger.info(f"👥 Loaded {len(AUTHORIZED_USERS['students'])} students and {len(AUTHORIZED_USERS['professors'])} professors.")
+        LAST_UPDATED = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+        logger.info(f"✅ State updated. Last loaded: {LAST_UPDATED}")
+
+# --- HELPER: The Background Loop ---
+async def background_sync_task():
+    """Runs forever in the background while the app is alive."""
+    while True:
+        # Run the blocking git operations in a separate thread so it doesn't freeze FastAPI
+        await asyncio.to_thread(sync_repository)
+        # Wait 5 minutes before checking again
+        await asyncio.sleep(300)
+
 # --- LIFESPAN HANDLER (The New Way) ---
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -277,20 +351,21 @@ async def lifespan(app: FastAPI):
         else:
             logger.info("📥 Cloning Private Repository...")
             Repo.clone_from(auth_url, ASSIGNMENTS_DIR)
-            
-        # Load Assignments and Users
-        ASSIGNMENTS = load_assignments_from_disk()
-        logger.info(f"📚 Loaded {len(ASSIGNMENTS)} assignments from Git.")
-        AUTHORIZED_USERS = load_users_from_disk()
-        logger.info(f"👥 Loaded {len(AUTHORIZED_USERS['students'])} students and {len(AUTHORIZED_USERS['professors'])} professors.")
     else:
         logger.warning("⚠️ No GIT credentials provided. Using empty assignment list.")
     
+    # Do the first load immediately
+    sync_repository()
+
+    # Start the background heartbeat
+    sync_task = asyncio.create_task(background_sync_task())
+
     # === YIELD CONTROL TO APP ===
     yield
     
     # === SHUTDOWN LOGIC (Optional) ===
     logger.info("🛑 Grader App Shutting Down...")
+    sync_task.cancel()
     # Clear the temp folder here if needed, 
     # but keeping it speeds up the next restart.
 

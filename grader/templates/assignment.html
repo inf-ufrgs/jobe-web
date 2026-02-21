@@ -61,11 +61,13 @@
 <div class="container lab-container">
     
     <div class="card shadow-sm mb-4">
-        <div class="card-header bg-dark text-white p-3 d-flex justify-content-between">
-            <h4 class="mb-0">{{ title }}</h4>
-            <span class="badge bg-secondary">Time Limit: {{ time_limit }}s</span>
-            <span class="badge bg-secondary">Memory Limit: {{ memory_limit }}MB</span>
-            <span class="badge bg-secondary">Author: {{ author }}</span>
+        <div class="card-header bg-dark text-white p-3 d-flex flex-wrap align-items-center justify-content-between gap-2">
+            <h4 class="mb-0 me-auto">{{ title }}</h4>
+            <div class="d-flex flex-wrap gap-2">
+                <span class="badge bg-secondary d-flex align-items-center">Time Limit: {{ time_limit }}s</span>
+                <span class="badge bg-secondary d-flex align-items-center">Memory Limit: {{ memory_limit }}MB</span>
+                <span class="badge bg-secondary d-flex align-items-center">Author: {{ author }}</span>
+            </div>
         </div>
         <div class="card-body markdown-content">
             {{ description_html | safe }}
