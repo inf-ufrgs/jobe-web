@@ -8,6 +8,7 @@ import zipfile
 import shutil
 import difflib
 import itertools
+import re
 import uuid # To generate unique IDs for the HTML accordion
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
@@ -219,6 +220,7 @@ def grade_submission(code, assignment_id):
             else:
                 # Runtime/Syntax Error
                 err = outcome.get('cmpinfo') or outcome.get('stderr') or "Runtime Error"
+                err = adjust_line_numbers(err)
                 results.append({"name": name, "status": JOBE_OUTCOME_MAP.get(outcome['outcome'], "Error"), "css": "danger", "details": err})
 
         except Exception as e:
@@ -381,6 +383,22 @@ def input(prompt=None):
     if not line: return ""
     return line.strip()
 """
+
+# Number of lines prepended to student code by the wrapper (computed once).
+# Used to fix line numbers in error/traceback messages from Jobe.
+WRAPPER_LINE_OFFSET = len((MOCK_WRAPPER + "\n").splitlines())
+
+def adjust_line_numbers(text: str) -> str:
+    """
+    Subtracts WRAPPER_LINE_OFFSET from every 'line N' reference in Jobe
+    error/traceback output so that line numbers match the student's original
+    code instead of the combined (wrapper + student) code.
+    """
+    def _fix(match):
+        n = int(match.group(1))
+        adjusted = max(1, n - WRAPPER_LINE_OFFSET)
+        return f"line {adjusted}"
+    return re.sub(r"line (\d+)", _fix, text)
 
 # --- ROUTES ---
 @app.get("/favicon.ico", include_in_schema=False)

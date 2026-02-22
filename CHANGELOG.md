@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Fixed
+- **Line numbers in error messages**: Subtracted the number of lines injected by the input wrapper (`MOCK_WRAPPER`) from all `line N` references in Jobe's error output, so reported line numbers now correctly point to the student's original code (Closes #2).
+
 ## [1.9] - 2026-02-20
 
 ### Added
