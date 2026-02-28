@@ -1,29 +1,40 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <title>Grading Report: {{ assignment }}</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.7.0/styles/github-dark.min.css">
     <style>
-        body { background-color: #f8f9fa; }
-        .table-hover tbody tr:hover { cursor: pointer; }
-        
+        body {
+            background-color: #f8f9fa;
+        }
+
+        .table-hover tbody tr:hover {
+            cursor: pointer;
+        }
+
         /* Custom styling for the expanded row content */
-        .detail-row td { 
-            background-color: #fff !important; 
-            padding: 0; 
+        .detail-row td {
+            background-color: #fff !important;
+            padding: 0;
             border-bottom: 2px solid #dee2e6;
         }
-        .detail-container { padding: 20px; background-color: #f8f9fa; border-left: 5px solid #6c757d; }
-        
-        /* Code box styling */
-        .code-box { 
-            max-height: 400px; 
-            overflow-y: auto; 
-            border-radius: 5px; 
-            font-size: 0.85rem; 
+
+        .detail-container {
+            padding: 20px;
+            background-color: #f8f9fa;
+            border-left: 5px solid #6c757d;
         }
-                
+
+        /* Code box styling */
+        .code-box {
+            max-height: 400px;
+            overflow-y: auto;
+            border-radius: 5px;
+            font-size: 0.85rem;
+        }
+
         /* Preformatted text for diffs */
         .diff-box {
             font-family: monospace;
@@ -33,25 +44,32 @@
             padding: 5px;
             border-radius: 3px;
         }
-        
+
         /* Side-by-Side Code Diff Styling */
         .diff-container {
-            background-color: #fff0f0; /* Light red tint for alert feeling */
+            background-color: #fff0f0;
+            /* Light red tint for alert feeling */
             border: 1px solid #f5c6cb;
             padding: 15px;
         }
+
         .diff-box {
-            background-color: #2d2d2d; /* Dark theme */
+            background-color: #2d2d2d;
+            /* Dark theme */
             color: #f8f8f2;
             border: 1px solid #444;
             border-radius: 4px;
             padding: 10px;
-            max-height: 400px; /* Fixed height */
-            overflow-y: auto;  /* Scrollable */
+            max-height: 400px;
+            /* Fixed height */
+            overflow-y: auto;
+            /* Scrollable */
             font-size: 0.8rem;
             font-family: 'Courier New', monospace;
-            white-space: pre;  /* Keep formatting */
+            white-space: pre;
+            /* Keep formatting */
         }
+
         /* Highlight the clicked row */
         .table-danger.clickable:hover {
             background-color: #f1b0b7;
@@ -59,150 +77,90 @@
         }
     </style>
 </head>
+
 <body>
 
-<div class="container-fluid mt-4" style="max-width: 1200px;">
-    
-    <div class="d-flex justify-content-between align-items-center mb-3">
-        <h3>📊 Report: {{ assignment }}</h3>
-        <div>
-            <a href="javascript: history.back()" class="btn btn-outline-secondary btn-sm">Back</a>
-            <button class="btn btn-primary btn-sm" onclick="window.print()">Print / PDF</button>
-        </div>
-    </div>
+    <div class="container-fluid mt-4" style="max-width: 1400px;">
 
-    <div class="card shadow-sm">
-        <table class="table table-hover mb-0">
-            <thead class="table-dark">
-                <tr>
-                    <th style="width: 40%">Student Name</th>
-                    <th style="width: 20%">Score</th>
-                    <th style="width: 20%">Status</th>
-                    <th style="width: 20%" class="text-end">Action</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for student in report %}
-                
-                <tr class="table-{{ student.css }}" data-bs-toggle="collapse" data-bs-target="#collapse-{{ student.id }}" aria-expanded="false">
-                    <td class="fw-bold">
-                        {{ student.name }}
-                        {% if student.has_warning != 1 %}
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h3>📊 Report: {{ assignment }}</h3>
+            <div>
+                <a href="javascript: history.back()" class="btn btn-outline-secondary btn-sm">Back</a>
+                <button class="btn btn-primary btn-sm" onclick="window.print()">Print / PDF</button>
+            </div>
+        </div>
+
+        <div class="card shadow-sm">
+            <table class="table table-hover mb-0">
+                <thead class="table-dark">
+                    <tr>
+                        <th style="width: 40%">Student Name</th>
+                        <th style="width: 20%">Score</th>
+                        <th style="width: 20%">Status</th>
+                        <th style="width: 20%" class="text-end">Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for student in report %}
+
+                    <tr class="table-{{ student.css }}" data-bs-toggle="collapse"
+                        data-bs-target="#collapse-{{ student.id }}" aria-expanded="false">
+                        <td class="fw-bold">
+                            {{ student.name }}
+                            {% if student.has_warning != 1 %}
                             {% if student.has_warning == 0 %}
                             <span class="text-danger fw-bold" title="Warning: No Python files submitted">*</span>
                             {% else %}
                             <span class="text-danger fw-bold" title="Warning: Multiple files submitted">*</span>
                             {% endif %}
-                        {% endif %}
-                    </td>
-                    <td>{{ student.score }}</td>
-                    <td>
-                        {% if student.css == 'success' %}
-                            <span class="badge bg-success">Passed</span>
-                        {% elif student.css == 'warning' %}
-                            <span class="badge bg-warning text-dark">Partial</span>
-                        {% else %}
-                            <span class="badge bg-danger">Failed</span>
-                        {% endif %}
-                    </td>
-                    <td class="text-end">
-                        <button class="btn btn-sm btn-dark">View Details ▼</button>
-                    </td>
-                </tr>
-
-                <tr class="detail-row">
-                    <td colspan="4">
-                        <div id="collapse-{{ student.id }}" class="collapse">
-                            <div class="detail-container">
-                                <div class="row">
-                                    
-                                    <div class="col-md-6">
-                                        <h6 class="text-muted text-uppercase">Source Code</h6>
-                                        <pre><code class="language-python code-box">{{ student.code_content }}</code></pre>
-                                    </div>
-
-                                    <div class="col-md-6">
-                                        <h6 class="text-muted text-uppercase">Test Breakdown</h6>
-                                        <div class="list-group">
-                                            {% for test in student.results %}
-                                            <div class="list-group-item">
-                                                <div class="d-flex w-100 justify-content-between">
-                                                    <span class="text-{{ test.css }}">{{ test.name }}: {{ test.status }}</span>
-                                                </div>
-                                                
-                                                {% if test.details %}
-                                                <div class="mt-2">
-                                                    <div class="diff-box">{{ test.details }}</div>
-                                                </div>
-                                                {% endif %}
-                                            </div>
-                                            {% endfor %}
-                                        </div>
-                                    </div>
-
-                                </div>
-                            </div>
-                        </div>
-                    </td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-    </div>
-
-    <div class="mt-3 text-muted small">
-        <p>* Indicates that the student submitted multiple files or no Python files. Only one file is graded.</p>
-    </div>
-    
-    {% if plagiarism %}
-    <div class="card border-danger shadow-sm mb-5">
-        <div class="card-header bg-danger text-white d-flex justify-content-between align-items-center">
-            <h5 class="mb-0">🚨 Potential Plagiarism Detected</h5>
-            <span class="badge bg-white text-danger">{{ plagiarism|length }} Pairs Found</span>
-        </div>
-        <div class="card-body p-0">
-            <table class="table table-hover mb-0">
-                <thead class="table-light">
-                    <tr>
-                        <th style="width: 35%">Student A</th>
-                        <th style="width: 35%">Student B</th>
-                        <th style="width: 20%">Similarity</th>
-                        <th style="width: 10%">Action</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for pair in plagiarism %}
-                    <tr class="table-danger clickable" data-bs-toggle="collapse" data-bs-target="#{{ pair.id }}" aria-expanded="false">
-                        <td class="fw-bold">{{ pair.student1 }}</td>
-                        <td class="fw-bold">{{ pair.student2 }}</td>
-                        <td>
-                            <div class="progress" style="height: 20px;">
-                                <div class="progress-bar bg-danger" role="progressbar" style="width: {{ pair.ratio }}%;">
-                                    {{ pair.ratio }}%
-                                </div>
-                            </div>
+                            {% endif %}
                         </td>
-                        <td><button class="btn btn-sm btn-outline-danger">Compare ▼</button></td>
+                        <td>{{ student.score }}</td>
+                        <td>
+                            {% if student.css == 'success' %}
+                            <span class="badge bg-success">Passed</span>
+                            {% elif student.css == 'warning' %}
+                            <span class="badge bg-warning text-dark">Partial</span>
+                            {% else %}
+                            <span class="badge bg-danger">Failed</span>
+                            {% endif %}
+                        </td>
+                        <td class="text-end">
+                            <button class="btn btn-sm btn-dark">View Details ▼</button>
+                        </td>
                     </tr>
-                    <tr>
-                        <td colspan="4" class="p-0 border-0">
-                            <div id="{{ pair.id }}" class="collapse">
-                                <div class="diff-container">
+
+                    <tr class="detail-row">
+                        <td colspan="4">
+                            <div id="collapse-{{ student.id }}" class="collapse">
+                                <div class="detail-container">
                                     <div class="row">
-                                        
+
                                         <div class="col-md-6">
-                                            <h6 class="text-danger fw-bold">{{ pair.student1 }}</h6>
-                                            <pre><code class="language-python diff-box">{{ pair.code1 }}</code></pre>
+                                            <h6 class="text-muted text-uppercase">Source Code</h6>
+                                            <pre><code class="language-python code-box">{{ student.code_content }}</code></pre>
                                         </div>
 
                                         <div class="col-md-6">
-                                            <h6 class="text-danger fw-bold">{{ pair.student2 }}</h6>
-                                            <pre><code class="language-python diff-box">{{ pair.code2 }}</code></pre>
+                                            <h6 class="text-muted text-uppercase">Test Breakdown</h6>
+                                            <div class="list-group">
+                                                {% for test in student.results %}
+                                                <div class="list-group-item">
+                                                    <div class="d-flex w-100 justify-content-between">
+                                                        <span class="text-{{ test.css }}">{{ test.name }}: {{
+                                                            test.status }}</span>
+                                                    </div>
+
+                                                    {% if test.details %}
+                                                    <div class="mt-2">
+                                                        <div class="diff-box">{{ test.details }}</div>
+                                                    </div>
+                                                    {% endif %}
+                                                </div>
+                                                {% endfor %}
+                                            </div>
                                         </div>
 
-                                    </div>
-                                    <div class="text-center mt-2">
-                                        <small class="text-muted">Visually check for identical logic, distinct variable names, or AI-generated comments.</small>
                                     </div>
                                 </div>
                             </div>
@@ -212,14 +170,81 @@
                 </tbody>
             </table>
         </div>
+
+        <div class="mt-3 text-muted small">
+            <p>* Indicates that the student submitted multiple files or no Python files. Only one file is graded.</p>
+        </div>
+
+        {% if plagiarism %}
+        <div class="card border-danger shadow-sm mb-5">
+            <div class="card-header bg-danger text-white d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">🚨 Potential Plagiarism Detected</h5>
+                <span class="badge bg-white text-danger">{{ plagiarism|length }} Pairs Found</span>
+            </div>
+            <div class="card-body p-0">
+                <table class="table table-hover mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th style="width: 35%">Student A</th>
+                            <th style="width: 35%">Student B</th>
+                            <th style="width: 20%">Similarity</th>
+                            <th style="width: 10%">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for pair in plagiarism %}
+                        <tr class="table-danger clickable" data-bs-toggle="collapse" data-bs-target="#{{ pair.id }}"
+                            aria-expanded="false">
+                            <td class="fw-bold">{{ pair.student1 }}</td>
+                            <td class="fw-bold">{{ pair.student2 }}</td>
+                            <td>
+                                <div class="progress" style="height: 20px;">
+                                    <div class="progress-bar bg-danger" role="progressbar"
+                                        style="width: {{ pair.ratio }}%;">
+                                        {{ pair.ratio }}%
+                                    </div>
+                                </div>
+                            </td>
+                            <td><button class="btn btn-sm btn-outline-danger">Compare ▼</button></td>
+                        </tr>
+                        <tr>
+                            <td colspan="4" class="p-0 border-0">
+                                <div id="{{ pair.id }}" class="collapse">
+                                    <div class="diff-container">
+                                        <div class="row">
+
+                                            <div class="col-md-6">
+                                                <h6 class="text-danger fw-bold">{{ pair.student1 }}</h6>
+                                                <pre><code class="language-python diff-box">{{ pair.code1 }}</code></pre>
+                                            </div>
+
+                                            <div class="col-md-6">
+                                                <h6 class="text-danger fw-bold">{{ pair.student2 }}</h6>
+                                                <pre><code class="language-python diff-box">{{ pair.code2 }}</code></pre>
+                                            </div>
+
+                                        </div>
+                                        <div class="text-center mt-2">
+                                            <small class="text-muted">Visually check for identical logic, distinct
+                                                variable names, or AI-generated comments.</small>
+                                        </div>
+                                    </div>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        {% endif %}
+
     </div>
-    {% endif %}
 
-</div>
-
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.7.0/highlight.min.js"></script>
-<script>hljs.highlightAll();</script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.7.0/highlight.min.js"></script>
+    <script>hljs.highlightAll();</script>
 
 </body>
+
 </html>

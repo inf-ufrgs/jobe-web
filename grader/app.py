@@ -56,8 +56,10 @@ AUTHORIZED_USERS = {
 LAST_UPDATED = "Never"
 
 # --- HELPER FUNCTIONS ---
-def load_assignments_from_disk():
-    """Scans the folder, reads README.md and config.yaml"""
+def load_assignments_from_disk(repo=None):
+    """Scans the folder, reads README.md and config.yaml.
+    If a repo object is provided, it also gets the last commit date for each assignment.
+    """
     new_assignments = {}
     if not os.path.exists(ASSIGNMENTS_DIR):
         logger.error(f"Assignments directory does not exist: {ASSIGNMENTS_DIR}")
@@ -107,12 +109,22 @@ def load_assignments_from_disk():
             logger.warning(f"config.yaml not found for {lab_id}")
 
         if config["tests"]:
+            # 3. Get Last Updated from Git
+            last_updated = "Unknown"
+            if repo:
+                try:
+                    # Get the last commit date for this folder
+                    last_updated = repo.git.log('-1', '--format=%cd', '--date=format:%Y-%m-%d %H:%M:%S', '--', lab_id)
+                except Exception as e:
+                    logger.error(f"Error getting last commit for {lab_id}: {e}")
+
             new_assignments[lab_id] = {
                 "title": config["title"],
                 "description_html": description_html,
                 "time_limit": config["time_limit"],
                 "memory_limit": config["memory_limit"],
                 "author": config["author"],
+                "last_updated": last_updated,
                 "cases": config["tests"]
             }
             logger.debug(f"Loaded assignment: {lab_id} with {len(config['tests'])} test cases.")
@@ -310,7 +322,7 @@ def sync_repository():
         logger.error(f"❌ Auto-sync failed: {e}")
 
     if should_reload:
-        ASSIGNMENTS = load_assignments_from_disk()
+        ASSIGNMENTS = load_assignments_from_disk(repo if 'repo' in locals() else None)
         logger.info(f"📚 Loaded {len(ASSIGNMENTS)} assignments from disk.")
         AUTHORIZED_USERS = load_users_from_disk()
         logger.info(f"👥 Loaded {len(AUTHORIZED_USERS['students'])} students and {len(AUTHORIZED_USERS['professors'])} professors.")
@@ -437,7 +449,8 @@ async def view_assignment(request: Request, assignment_id: str):
         "description_html": lab_data['description_html'],
         "time_limit": lab_data.get('time_limit'),
         "memory_limit": lab_data.get('memory_limit'),
-        "author": lab_data.get('author')
+        "author": lab_data.get('author'),
+        "last_updated": lab_data.get('last_updated')
     })
 
 # 3. STUDENT SUBMISSION ROUTE
