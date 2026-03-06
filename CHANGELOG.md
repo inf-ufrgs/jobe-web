@@ -2,9 +2,10 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased]
+## [1.10] - 2026-03-06
 
 ### Fixed
+- **Leading Zeros in IDs**: Allow students and professors to log in disregarding leading zeros in their IDs (Closes #7).
 - **Line numbers in error messages**: Subtracted the number of lines injected by the input wrapper (`MOCK_WRAPPER`) from all `line N` references in Jobe's error output, so reported line numbers now correctly point to the student's original code (Closes #2).
 
 ## [1.9] - 2026-02-20

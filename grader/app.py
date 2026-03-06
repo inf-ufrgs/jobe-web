@@ -133,6 +133,10 @@ def load_assignments_from_disk(repo=None):
     return new_assignments
 
 # --- HELPER: Load Users ---
+def normalize_id(id_str: str) -> str:
+    """Removes leading zeros and whitespace from an ID string."""
+    return id_str.strip().lstrip('0')
+
 def load_users_from_disk():
     """Reads users.yaml and returns a dict of sets"""
     users_path = os.path.join(ASSIGNMENTS_DIR, "users.yaml")
@@ -146,10 +150,10 @@ def load_users_from_disk():
                 # Convert lists to sets for O(1) lookup speed
                 # usage of str() ensures we don't have integer/string mismatches
                 if "students" in raw:
-                    data["students"] = set(str(u) for u in raw["students"])
+                    data["students"] = set(normalize_id(str(u)) for u in raw["students"])
                 
                 if "professors" in raw:
-                    data["professors"] = set(str(u) for u in raw["professors"])
+                    data["professors"] = set(normalize_id(str(u)) for u in raw["professors"])
                     
         except Exception as e:
             logger.error(f"❌ Error loading users.yaml: {e}")
@@ -464,7 +468,8 @@ async def submit_code(
     # 1. SECURITY CHECK
     # We strip whitespace just in case they added a space by accident
     client_ip = request.client.host
-    if student_id.strip() not in AUTHORIZED_USERS["students"] and student_id.strip() not in AUTHORIZED_USERS["professors"]:
+    normalized_student_id = normalize_id(student_id)
+    if normalized_student_id not in AUTHORIZED_USERS["students"] and normalized_student_id not in AUTHORIZED_USERS["professors"]:
         logger.warning(f"UNAUTHORIZED ATTEMPT | Student: {student_id} | IP: {client_ip}")
         return HTMLResponse(
             content=f"""
@@ -519,7 +524,9 @@ async def professor_grade(
     zip_file: UploadFile = File(...)
 ):
     # 1. Auth Check
-    if prof_id.strip() not in AUTHORIZED_USERS["professors"]:
+    client_ip = request.client.host
+    if normalize_id(prof_id) not in AUTHORIZED_USERS["professors"]:
+        logger.warning(f"UNAUTHORIZED ATTEMPT | Professor: {prof_id} | IP: {client_ip}")
         return HTMLResponse("<h1>🚫 Access Denied</h1>", status_code=403)
 
     # 2. Setup Temp Directory
