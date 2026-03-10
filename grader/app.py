@@ -1,5 +1,6 @@
 import os
 import requests
+import tempfile
 import logging
 import shutil         # For clearing invalid git folders
 from contextlib import asynccontextmanager
@@ -515,7 +516,73 @@ async def professor_upload_page(request: Request, assignment_id: str):
         "title": lab_data['title']
     })
 
-# 5. PROFESSOR SUBMISSION ROUTE
+# --- HELPER: Grade all student submissions in a directory ---
+def _grade_from_directory(temp_dir: str, assignment_id: str) -> tuple[list, list]:
+    """
+    Iterates through student folders in temp_dir (Moodle ZIP layout),
+    grades each .py file, runs plagiarism check, and returns
+    (report_data, plagiarism_report).
+    """
+    report_data = []
+    items = os.listdir(temp_dir)
+
+    for i, item in enumerate(sorted(items)):
+        student_dir = os.path.join(temp_dir, item)
+
+        # Skip non-directories, zip files, and __MACOSX junk
+        if not os.path.isdir(student_dir) or item.startswith("__"):
+            continue
+
+        # Extract Name (Assumption: "Name_ID_...")
+        parts = item.split('_')
+        student_name = parts[0]
+
+        # Find Python Files
+        py_files = [f for f in os.listdir(student_dir) if f.endswith(".py")]
+
+        student_status = {}
+
+        if not py_files:
+            student_status = {"name": student_name, "has_warning": 0, "score": "0", "status": "No File", "css": "secondary"}
+        else:
+            # Pick the first one
+            target_file = py_files[0]
+
+            with open(os.path.join(student_dir, target_file), "r", encoding="utf-8", errors="ignore") as f:
+                code_content = f.read()
+
+            # --- RUN THE GRADER ---
+            score, total, results = grade_submission(code_content, assignment_id)
+
+            # Calculate Pass/Fail CSS
+            row_css = "success" if score == total else ("warning" if score > 0 else "danger")
+
+            student_status = {
+                "id": f"student_{i}",
+                "name": student_name,
+                "has_warning": len(py_files),
+                "score": f"{score}/{total} ({score/total*100:.1f}%)",
+                "css": row_css,
+                "code_content": code_content,
+                "results": results
+            }
+
+        report_data.append(student_status)
+
+    # Plagiarism check
+    class_submissions = []
+    for item in report_data:
+        if item.get('code_content'):
+            class_submissions.append({
+                "name": item['name'],
+                "code": item['code_content']
+            })
+
+    plagiarism_report = check_similarity(class_submissions)
+    return report_data, plagiarism_report
+
+
+# 5. PROFESSOR SUBMISSION ROUTE (ZIP Upload)
 @app.post("/professor/grade", response_class=HTMLResponse)
 async def professor_grade(
     request: Request,
@@ -530,96 +597,157 @@ async def professor_grade(
         return HTMLResponse("<h1>🚫 Access Denied</h1>", status_code=403)
 
     # 2. Setup Temp Directory
-    # We use a random suffix or timestamp to prevent collisions if two TAs grade at once
-    import uuid
-    run_id = str(uuid.uuid4())[:8]
-    temp_dir = f"/tmp/grade_{assignment_id}_{run_id}"
-    
-    if os.path.exists(temp_dir): shutil.rmtree(temp_dir)
-    os.makedirs(temp_dir)
-    
-    zip_path = f"{temp_dir}/submissions.zip"
+    temp_dir = tempfile.mkdtemp(prefix=f"grade_{assignment_id}_")
+
+    zip_path = os.path.join(temp_dir, "submissions.zip")
     with open(zip_path, "wb") as buffer:
         shutil.copyfileobj(zip_file.file, buffer)
-        
+
     try:
         with zipfile.ZipFile(zip_path, 'r') as zip_ref:
             zip_ref.extractall(temp_dir)
     except zipfile.BadZipFile:
+        shutil.rmtree(temp_dir)
         return HTMLResponse("Error: Invalid ZIP file", status_code=400)
 
-    # 3. Iterate through Folders (The "Moodle Parser")
-    report_data = []
-    
-    # Walk through the extracted folder
-    # Look for folders that match the pattern "Name_ID_..."
-    extracted_root = temp_dir
-    
-    # Sometimes parsing creates a subfolder, so we check root contents
-    items = os.listdir(extracted_root)
-    
-    for i, item in enumerate(sorted(items)):
-        student_dir = os.path.join(extracted_root, item)
-        
-        # Skip the zip file itself and __MACOSX junk
-        if not os.path.isdir(student_dir) or item.startswith("__"):
-            continue
-
-        # Extract Name (Assumption: "Name_ID_...")
-        parts = item.split('_')
-        student_name = parts[0]
-        
-        # Find Python Files
-        py_files = [f for f in os.listdir(student_dir) if f.endswith(".py")]
-        
-        student_status = {}
-        
-        if not py_files:
-            student_status = {"name": student_name, "has_warning": 0, "score": "0", "status": "No File", "css": "secondary"}
-        else:
-            # Pick the first one
-            target_file = py_files[0]
-            warning = f"(Found {len(py_files)} files)" if len(py_files) > 1 else ""
-            
-            with open(os.path.join(student_dir, target_file), "r", encoding="utf-8", errors="ignore") as f:
-                code_content = f.read()
-            
-            # --- RUN THE GRADER ---
-            score, total, results = grade_submission(code_content, assignment_id)
-            
-            # Calculate Pass/Fail CSS
-            row_css = "success" if score == total else ("warning" if score > 0 else "danger")
-            
-            # Inside the professor_grade loop in app.py:
-
-            student_status = {
-                "id": f"student_{i}",  # Unique ID for the HTML collapse target
-                "name": student_name,
-                "has_warning": len(py_files),  # Lenght of py_files for warning display should be always 1
-                "score": f"{score}/{total} ({score/total*100:.1f}%)",
-                "css": row_css,  # "success", "danger", or "warning"
-                "code_content": code_content,
-                "results": results # The list of test outcomes
-            }
-
-        report_data.append(student_status)
-
-    # Cleanup
+    # 3. Grade & Cleanup
+    report_data, plagiarism_report = _grade_from_directory(temp_dir, assignment_id)
     shutil.rmtree(temp_dir)
 
-    # 1. Collect all valid codes for plagiarism check
-    class_submissions = []
-    for item in report_data:
-        if item.get('code_content'):
-            class_submissions.append({
-                "name": item['name'],
-                "code": item['code_content']
-            })
+    return templates.TemplateResponse("professor_report.html", {
+        "request": request,
+        "report": report_data,
+        "plagiarism": plagiarism_report,
+        "assignment": ASSIGNMENTS[assignment_id]['title']
+    })
 
-    # 2. Run the Check
-    plagiarism_report = check_similarity(class_submissions)
 
-    # 3. Pass to Template
+# 6. MOODLE CONNECT ROUTE
+@app.get("/professor/moodle/{assignment_id}", response_class=HTMLResponse)
+async def moodle_connect_page(request: Request, assignment_id: str):
+    """Renders the Moodle connection form for a specific assignment."""
+    if assignment_id not in ASSIGNMENTS:
+        raise HTTPException(status_code=404, detail="Assignment not found")
+
+    lab_data = ASSIGNMENTS[assignment_id]
+    return templates.TemplateResponse("moodle_connect.html", {
+        "request": request,
+        "assignment_id": assignment_id,
+        "title": lab_data['title'],
+    })
+
+
+# 7. MOODLE ASSIGNMENT LIST ROUTE
+@app.post("/professor/moodle/assignments", response_class=HTMLResponse)
+async def moodle_list_assignments(
+    request: Request,
+    prof_id: str = Form(...),
+    moodle_token: str = Form(...),
+    course_id: int = Form(...),
+    assignment_id: str = Form(...),
+):
+    """Fetches assignments from Moodle and displays them for selection."""
+    # Auth check
+    client_ip = request.client.host
+    if normalize_id(prof_id) not in AUTHORIZED_USERS["professors"]:
+        logger.warning(f"UNAUTHORIZED ATTEMPT | Professor: {prof_id} | IP: {client_ip}")
+        return HTMLResponse("<h1>🚫 Access Denied</h1>", status_code=403)
+
+    if assignment_id not in ASSIGNMENTS:
+        raise HTTPException(status_code=404, detail="Assignment not found")
+
+    from moodle_service import list_course_assignments, MoodleAPIError
+
+    def _normalize_name(name: str) -> str:
+        return re.sub(r'[^a-z0-9]', '', name.lower())
+
+    error = None
+    moodle_assignments = []
+    try:
+        moodle_assignments = list_course_assignments(moodle_token, course_id)
+        
+        # Highlight match
+        norm_task_id = _normalize_name(assignment_id)
+        for ma in moodle_assignments:
+            if norm_task_id in _normalize_name(ma["name"]):
+                ma["is_match"] = True
+            else:
+                ma["is_match"] = False
+
+    except MoodleAPIError as e:
+        error = str(e)
+        logger.warning(f"Moodle API error for professor {prof_id}: {e}")
+
+    return templates.TemplateResponse("moodle_assignments.html", {
+        "request": request,
+        "assignment_id": assignment_id,
+        "title": ASSIGNMENTS[assignment_id]['title'],
+        "prof_id": prof_id,
+        "moodle_token": moodle_token,
+        "course_id": course_id,
+        "moodle_assignments": moodle_assignments,
+        "error": error,
+    })
+
+
+# 8. MOODLE GRADE ROUTE
+@app.post("/professor/moodle/grade", response_class=HTMLResponse)
+async def moodle_grade(
+    request: Request,
+    prof_id: str = Form(...),
+    moodle_token: str = Form(...),
+    course_id: int = Form(...),
+    assignment_id: str = Form(...),
+    moodle_assign_id: int = Form(...),
+):
+    """
+    Downloads submissions from Moodle for the selected assignment,
+    then grades them using the local assignment's test cases.
+    """
+    # Auth check
+    client_ip = request.client.host
+    if normalize_id(prof_id) not in AUTHORIZED_USERS["professors"]:
+        logger.warning(f"UNAUTHORIZED ATTEMPT | Professor: {prof_id} | IP: {client_ip}")
+        return HTMLResponse("<h1>🚫 Access Denied</h1>", status_code=403)
+
+    if assignment_id not in ASSIGNMENTS:
+        raise HTTPException(status_code=404, detail="Assignment not found")
+
+    from moodle_service import download_assignment_submissions, MoodleAPIError
+
+    temp_dir = tempfile.mkdtemp(prefix=f"moodle_{assignment_id}_")
+
+    try:
+        download_count = download_assignment_submissions(
+            moodle_token, moodle_assign_id, course_id, temp_dir
+        )
+        logger.info(f"MOODLE GRADE | Prof: {prof_id} | Assignment: {assignment_id} | "
+                     f"Moodle ID: {moodle_assign_id} | Files: {download_count} | IP: {client_ip}")
+
+        if download_count == 0:
+            shutil.rmtree(temp_dir)
+            return HTMLResponse(
+                "<h1>⚠️ No submissions found</h1>"
+                "<p>No files were downloaded from Moodle for this assignment.</p>"
+                '<a href="javascript: history.back()">Go back</a>',
+                status_code=200
+            )
+
+        # Grade using the shared helper
+        report_data, plagiarism_report = _grade_from_directory(temp_dir, assignment_id)
+
+    except MoodleAPIError as e:
+        shutil.rmtree(temp_dir)
+        logger.error(f"Moodle download failed for prof {prof_id}: {e}")
+        return HTMLResponse(
+            f"<h1>⚠️ Moodle Error</h1><p>{e}</p>"
+            '<a href="javascript: history.back()">Go back</a>',
+            status_code=502
+        )
+    finally:
+        if os.path.exists(temp_dir):
+            shutil.rmtree(temp_dir)
+
     return templates.TemplateResponse("professor_report.html", {
         "request": request,
         "report": report_data,

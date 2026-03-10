@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.11] - 2026-03-10
+
+### Added
+- **Moodle Integration**: Professors can now import student submissions directly from Moodle by providing a course ID and a web-service token. The system automatically maps students and matches Moodle assignments to local grader assignments using name normalization (Closes #9).
+
 ## [1.10] - 2026-03-06
 
 ### Fixed

@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <title>Select Moodle Assignment</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        .table-hover tbody tr:hover {
+            cursor: pointer;
+            background-color: #e9ecef;
+        }
+    </style>
+</head>
+
+<body class="bg-light">
+
+    <div class="container mt-5" style="max-width: 900px;">
+        <div class="alert alert-info shadow-sm d-flex justify-content-between align-items-center">
+            <div>
+                <small class="text-uppercase fw-bold">Grading Against</small>
+                <h5 class="mb-0">{{ title }}</h5>
+            </div>
+            <a href="/professor/moodle/{{ assignment_id }}" class="btn btn-outline-secondary btn-sm">← Back</a>
+        </div>
+
+        {% if error %}
+        <div class="alert alert-danger shadow-sm">
+            <strong>⚠️ Error:</strong> {{ error }}
+        </div>
+        {% endif %}
+
+        {% if moodle_assignments %}
+        <div class="card shadow">
+            <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">📋 Moodle Assignments ({{ moodle_assignments|length }})</h5>
+            </div>
+            <div class="card-body p-0">
+                <table class="table table-hover mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Assignment Name</th>
+                            <th>Due Date</th>
+                            <th class="text-center">Submissions</th>
+                            <th class="text-end">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for ma in moodle_assignments %}
+                        <tr {% if ma.is_match %}class="table-warning" {% endif %}>
+                            <td class="fw-bold">
+                                {{ ma.name }}
+                                {% if ma.is_match %}
+                                <span class="badge bg-warning text-dark ms-2">⭐ Likely Match</span>
+                                {% endif %}
+                            </td>
+                            <td>{{ ma.duedate_formatted }}</td>
+                            <td class="text-center">
+                                {% if ma.submissions_count > 0 %}
+                                <span class="badge bg-success">{{ ma.submissions_count }}</span>
+                                {% else %}
+                                <span class="badge bg-secondary">0</span>
+                                {% endif %}
+                            </td>
+                            <td class="text-end">
+                                <form action="/professor/moodle/grade" method="post" style="display:inline;">
+                                    <input type="hidden" name="prof_id" value="{{ prof_id }}">
+                                    <input type="hidden" name="moodle_token" value="{{ moodle_token }}">
+                                    <input type="hidden" name="course_id" value="{{ course_id }}">
+                                    <input type="hidden" name="assignment_id" value="{{ assignment_id }}">
+                                    <input type="hidden" name="moodle_assign_id" value="{{ ma.id }}">
+                                    <button type="submit" class="btn btn-sm btn-primary" {% if ma.submissions_count==0
+                                        %}disabled{% endif %}>
+                                        🚀 Grade
+                                    </button>
+                                </form>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        {% else %}
+        <div class="alert alert-warning shadow-sm">
+            No assignments found for this course.
+        </div>
+        {% endif %}
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+
+</html>

@@ -8,7 +8,7 @@ A modern web interface for the **Jobe** server, designed for auto-grading studen
 
 - **Instant Feedback**: Students get immediate results with side-by-side colored diffs for failed tests.
 - **Auto-Sync**: Automatically pulls the latest assignments and user lists from a private GitHub repository.
-- **Professor Tools**: Bulk grade submissions via ZIP files and run built-in similarity checks (plagiarism detection).
+- **Professor Tools**: Bulk grade submissions via direct Moodle import or ZIP files, and run built-in similarity checks (plagiarism detection).
 - **Graceful Auth**: Simple login system that uses only student/professor IDs, no passwords to remember.
 - **Responsive UI**: Clean interface built with Bootstrap 5, works on mobile devices too.
 
