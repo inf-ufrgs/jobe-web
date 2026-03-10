@@ -11,6 +11,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy application code file by file
 COPY app.py .
+COPY moodle_service.py .
 COPY templates/ ./templates/
 
 # Expose port 8000
