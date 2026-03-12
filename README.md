@@ -54,7 +54,7 @@ A modern web interface for the **Jobe** server, designed for auto-grading studen
    export GIT_TOKEN="your_github_pat"
    ```
 
-   See an example repository at [inf-ufrgs/inf01040-assignments](https://github.com/inf-ufrgs/inf01040-assignments).
+   See an example repository at [inf-ufrgs/inf01040-assignments](https://github.com/inf-ufrgs/inf01040-assignments) (private repo, ask for permission).
 
 4. **Run the application**:
    ```bash
@@ -69,7 +69,7 @@ A modern web interface for the **Jobe** server, designed for auto-grading studen
 To build the image locally (from the `grader` directory, where the Dockerfile is):
 
 ```bash
-docker build -t julianowick/jobe-web:latest .
+docker build -t yourdockerhub/jobe-web:latest .
 ```
 
 To run the container:
@@ -79,7 +79,7 @@ docker run -p 8000:8000 \
   -e JOBE_URL="http://your-jobe-server-url" \
   -e GIT_REPO_URL="https://github.com/your-repo" \
   -e GIT_TOKEN="your-token" \
-  julianowick/jobe-web:latest
+  yourdockerhub/jobe-web:latest
 ```
 
 ---
