@@ -34,6 +34,16 @@
         .d2h-file-header {
             display: none !important;
         }
+
+        .diff-header {
+            border-bottom: none !important;
+        }
+
+        .d2h-file-wrapper {
+            border-top: none !important;
+            border-top-left-radius: 0 !important;
+            border-top-right-radius: 0 !important;
+        }
     </style>
 </head>
 
@@ -61,9 +71,14 @@
                         <div class="mt-2">
                             {% if res.diff %}
                             <small class="text-muted">Diferença Visual (Diff):</small>
+                            <div class="diff-header row g-0 border-start border-end border-top bg-light py-1 fw-bold text-center small text-muted mt-2"
+                                style="border-top-left-radius: 4px; border-top-right-radius: 4px;">
+                                <div class="col-6">Saída Esperada</div>
+                                <div class="col-6 border-start">Saída Recebida</div>
+                            </div>
                             <script type="application/json"
                                 class="raw-diff-data">{{ res.diff | tojson | safe }}</script>
-                            <div class="diff-target mt-1 mb-3"></div>
+                            <div class="diff-target mb-3"></div>
 
                             <button class="btn btn-sm btn-outline-secondary mb-2" type="button"
                                 data-bs-toggle="collapse" data-bs-target="#collapseLogs{{ loop.index }}"
