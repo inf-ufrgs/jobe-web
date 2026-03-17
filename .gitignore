@@ -209,3 +209,6 @@ __marimo__/
 # Assignments folder is cloned from external Git repository
 assignments/
 scripts/assignments_imported
+
+# SAML SP certificates (private key must not be committed)
+grader/saml/certs/

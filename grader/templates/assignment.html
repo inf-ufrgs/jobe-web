@@ -103,10 +103,35 @@
 
                     <input type="hidden" name="assignment_id" value="{{ assignment_id }}">
 
+                    {% if saml_enabled and saml_user %}
+                    {# SAML authenticated user #}
+                    <div class="alert alert-success d-flex align-items-center justify-content-between mb-3" role="alert">
+                        <div>
+                            <strong>✅ Logado como:</strong> {{ saml_user.display_name }}
+                            <span class="text-muted ms-2">(Matrícula: {{ saml_user.uid }})</span>
+                        </div>
+                        <a href="/saml/logout?assignment_id={{ assignment_id }}" class="btn btn-sm btn-outline-danger">Sair</a>
+                    </div>
+                    <input type="hidden" name="student_id" value="__saml__">
+                    {% else %}
+                    {# Traditional Matrícula input #}
                     <div class="mb-3">
                         <label class="form-label fw-bold">Matrícula:</label>
                         <input type="text" name="student_id" class="form-control" placeholder="00123456" required>
                     </div>
+
+                    {% if saml_enabled %}
+                    <div class="mb-3 text-center">
+                        <span class="text-muted">ou</span>
+                    </div>
+                    <div class="mb-3 d-grid">
+                        <a href="/saml/login?assignment_id={{ assignment_id }}" class="btn btn-outline-primary">
+                            🏛️ Login com UFRGS
+                        </a>
+                    </div>
+                    <hr>
+                    {% endif %}
+                    {% endif %}
 
                     <div class="mb-3">
                         <label class="form-label fw-bold">Código Python:</label>

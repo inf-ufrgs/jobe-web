@@ -29,6 +29,20 @@ spec:
             secretKeyRef:
               name: git-creds
               key: token
+        # SAML Configuration
+        - name: SAML_ENABLED
+          value: "true"
+        - name: SAML_SP_BASE_URL
+          value: "https://jobe-web.k8s.inf.ufrgs.br"
+        - name: SESSION_SECRET_KEY
+          valueFrom:
+            secretKeyRef:
+              name: saml-creds
+              key: session-secret
+        volumeMounts:
+        - name: saml-certs
+          mountPath: /app/saml/certs
+          readOnly: true
         resources:
           # Limits to ensure it doesn't drain cluster resources
           limits:
@@ -37,6 +51,15 @@ spec:
           requests:
             memory: "256Mi"
             cpu: "100m"
+      volumes:
+      - name: saml-certs
+        secret:
+          secretName: saml-creds
+          items:
+          - key: sp.crt
+            path: sp.crt
+          - key: sp.key
+            path: sp.key
 ---
 apiVersion: v1
 kind: Service

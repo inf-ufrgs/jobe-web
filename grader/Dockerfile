@@ -2,8 +2,8 @@ FROM python:slim
 
 WORKDIR /app
 
-# Install system git
-RUN apt-get update && apt-get install -y git && rm -rf /var/lib/apt/lists/*
+# Install system dependencies (git for repo sync, xmlsec1 + pkg-config for SAML)
+RUN apt-get update && apt-get install -y git xmlsec1 pkg-config && rm -rf /var/lib/apt/lists/*
 
 # Install dependencies
 COPY requirements.txt .
@@ -13,6 +13,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY app.py .
 COPY moodle_service.py .
 COPY templates/ ./templates/
+COPY saml/ ./saml/
 
 # Expose port 8000
 EXPOSE 8000
