@@ -309,30 +309,37 @@ def sync_repository():
     if LAST_UPDATED == "Never":
         should_reload = True
 
-    try:
-        repo = Repo(ASSIGNMENTS_DIR)
-        
-        # 1. Fetch the latest metadata from GitHub
-        repo.remotes.origin.fetch()
-        
-        # 2. Check if local commit matches remote commit
-        local_commit = repo.head.commit
-        remote_commit = repo.remotes.origin.refs.main.commit # Change 'main' if your default branch is 'master'
-        
-        if local_commit != remote_commit:
-            logger.info("🔄 New commits detected on GitHub! Pulling...")
+    if REPO_URL and GIT_TOKEN:
+        try:
+            repo = Repo(ASSIGNMENTS_DIR)
             
-            # Re-apply the auth URL just to be safe before pulling
-            # Construct Authenticated URL safely
-            auth_url = REPO_URL.replace("https://", f"https://{GIT_TOKEN}@")
-            if auth_url:
-                repo.remotes.origin.set_url(auth_url)
+            # 1. Fetch the latest metadata from GitHub
+            repo.remotes.origin.fetch()
             
-            repo.remotes.origin.pull()
-            should_reload = True
+            # 2. Check if local commit matches remote commit
+            local_commit = repo.head.commit
+            remote_commit = repo.remotes.origin.refs.main.commit # Change 'main' if your default branch is 'master'
             
-    except Exception as e:
-        logger.error(f"❌ Auto-sync failed: {e}")
+            if local_commit != remote_commit:
+                logger.info("🔄 New commits detected on GitHub! Pulling...")
+                
+                # Re-apply the auth URL just to be safe before pulling
+                # Construct Authenticated URL safely
+                auth_url = REPO_URL.replace("https://", f"https://{GIT_TOKEN}@")
+                if auth_url:
+                    repo.remotes.origin.set_url(auth_url)
+                
+                repo.remotes.origin.pull()
+                should_reload = True
+                
+        except Exception as e:
+            logger.error(f"❌ Auto-sync failed: {e}")
+    else:
+        # No git credentials, maybe just try to open the repo to get commit info if possible
+        try:
+            repo = Repo(ASSIGNMENTS_DIR)
+        except:
+            pass # Not a git repo, no problem, load_assignments_from_disk(None) will handle it.
 
     if should_reload:
         ASSIGNMENTS = load_assignments_from_disk(repo if 'repo' in locals() else None)
@@ -379,7 +386,10 @@ async def lifespan(app: FastAPI):
             logger.info("📥 Cloning Private Repository...")
             Repo.clone_from(auth_url, ASSIGNMENTS_DIR)
     else:
-        logger.warning("⚠️ No GIT credentials provided. Using empty assignment list.")
+        if os.path.exists(ASSIGNMENTS_DIR):
+            logger.info("📂 Assignments folder found. Using local files (no GIT credentials provided).")
+        else:
+            logger.warning("⚠️ No GIT credentials provided and assignments folder not found. App will be empty.")
     
     # Do the first load immediately
     sync_repository()
