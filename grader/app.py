@@ -944,11 +944,14 @@ async def saml_acs(request: Request):
 
     logger.info(f"SAML LOGIN SUCCESS | uid: {uid} | name: {display_name} | mail: {mail}")
 
-    # Store user info in session
+    # Store user info and SAML session details in session
     request.session["saml_user"] = {
         "uid": uid,
         "display_name": display_name,
         "mail": mail,
+        "name_id": auth.get_nameid(),
+        "session_index": auth.get_session_index(),
+        "name_id_format": auth.get_nameid_format(),
     }
 
     # Redirect to the RelayState (the original assignment page) or home
@@ -964,13 +967,56 @@ async def saml_acs(request: Request):
 
 @app.get("/saml/logout")
 async def saml_logout(request: Request, assignment_id: str = None):
-    """Clears the SAML session and redirects the user."""
-    request.session.pop("saml_user", None)
+    """Initiates SAML Single Logout by redirecting to the IdP."""
+    if not SAML_ENABLED:
+        raise HTTPException(status_code=404, detail="SAML authentication is not enabled")
 
-    if assignment_id:
-        return RedirectResponse(url=f"/assignment/{assignment_id}")
-    else:
+    # If no SAML user in session, just redirect home
+    saml_user = request.session.get("saml_user")
+    if not saml_user:
         return RedirectResponse(url="/")
+
+    auth = _prepare_saml_auth(request)
+    
+    # Pass the RelayState so we know where to go after the IdP logs us out
+    return_to = f"{SAML_SP_BASE_URL}/assignment/{assignment_id}" if assignment_id else SAML_SP_BASE_URL
+
+    # Initiate logout at the IdP using the stored session identifiers
+    slo_url = auth.logout(
+        name_id=saml_user.get("name_id"),
+        session_index=saml_user.get("session_index"),
+        return_to=return_to,
+        name_id_format=saml_user.get("name_id_format")
+    )
+    
+    return RedirectResponse(url=slo_url)
+
+
+@app.get("/saml/sls")
+async def saml_sls(request: Request):
+    """
+    Single Logout Service: receives the LogoutResponse from the IdP,
+    clears the local session, and redirects the user.
+    """
+    if not SAML_ENABLED:
+        raise HTTPException(status_code=404, detail="SAML authentication is not enabled")
+
+    auth = _prepare_saml_auth(request)
+    
+    url = auth.process_slo(keep_local_session=False)
+    errors = auth.get_errors()
+    
+    if errors:
+        logger.error(f"SAML SLS Error: {errors} | Reason: {auth.get_last_error_reason()}")
+
+    # Clear our local session
+    request.session.pop("saml_user", None)
+    
+    # The URL returned by process_slo is the RelayState we sent in saml_logout
+    if url and url.startswith(SAML_SP_BASE_URL):
+        return RedirectResponse(url=url)
+    
+    return RedirectResponse(url="/")
 
 
 @app.get("/saml/metadata")
