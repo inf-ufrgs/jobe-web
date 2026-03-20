@@ -22,7 +22,7 @@
             "binding": "urn:oasis:names:tc:SAML:2.0:bindings:HTTP-Redirect"
         },
         "singleLogoutService": {
-            "url": "",
+            "url": "https://login.ufrgs.br/idp/profile/SAML2/Redirect/SLO",
             "binding": "urn:oasis:names:tc:SAML:2.0:bindings:HTTP-Redirect"
         },
         "certFingerprint": "AB:12:8C:D4:81:C1:7B:81:BB:8D:EE:D8:11:AE:11:D7:9D:A9:50:FB",
