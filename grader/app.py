@@ -811,11 +811,22 @@ def _prepare_saml_auth(request: Request, post_data: dict = None):
     """
     from onelogin.saml2.auth import OneLogin_Saml2_Auth
 
+    # Determine HTTPS correctly when running behind a TLS-terminating ingress/proxy.
+    # request.url.scheme reports 'http' because the ingress strips TLS before forwarding
+    # to the pod. Check X-Forwarded-Proto (set by most ingress controllers) first,
+    # then fall back to the configured SAML_SP_BASE_URL scheme.
+    forwarded_proto = request.headers.get("x-forwarded-proto", "")
+    is_https = (
+        forwarded_proto == "https"
+        or request.url.scheme == "https"
+        or SAML_SP_BASE_URL.startswith("https://")
+    )
+
     # Build the request dict that python3-saml expects
     url_data = {
-        "https": "on" if request.url.scheme == "https" else "off",
+        "https": "on" if is_https else "off",
         "http_host": request.headers.get("host", "localhost"),
-        "server_port": request.url.port or (443 if request.url.scheme == "https" else 80),
+        "server_port": 443 if is_https else (request.url.port or 80),
         "script_name": request.url.path,
         "get_data": dict(request.query_params),
         "post_data": post_data or {},
