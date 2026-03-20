@@ -802,10 +802,12 @@ async def moodle_grade(
 
 
 # --- SAML ROUTES ---
-def _prepare_saml_auth(request: Request):
+def _prepare_saml_auth(request: Request, post_data: dict = None):
     """
     Prepares the OneLogin_Saml2_Auth object from a FastAPI request.
     Dynamically overrides SP settings from environment variables.
+    post_data should be passed for POST endpoints (e.g. /saml/acs) since
+    python3-saml requires all request data to be present at construction time.
     """
     from onelogin.saml2.auth import OneLogin_Saml2_Auth
 
@@ -816,7 +818,7 @@ def _prepare_saml_auth(request: Request):
         "server_port": request.url.port or (443 if request.url.scheme == "https" else 80),
         "script_name": request.url.path,
         "get_data": dict(request.query_params),
-        "post_data": {},
+        "post_data": post_data or {},
     }
 
     # Load base settings from the saml/ directory
@@ -888,10 +890,11 @@ async def saml_acs(request: Request):
     if not SAML_ENABLED:
         raise HTTPException(status_code=404, detail="SAML authentication is not enabled")
 
-    # python3-saml expects form data in the request dict
+    # Read form data FIRST, then pass it into the auth object at construction time.
+    # python3-saml requires post_data to be present in the request dict when
+    # OneLogin_Saml2_Auth is instantiated — it cannot be set as an attribute afterward.
     form_data = await request.form()
-    auth = _prepare_saml_auth(request)
-    auth.request_data["post_data"] = dict(form_data)
+    auth = _prepare_saml_auth(request, post_data=dict(form_data))
 
     auth.process_response()
     errors = auth.get_errors()
