@@ -1,18 +1,20 @@
 import os
+import json
 import requests
 import tempfile
 import logging
 import shutil         # For clearing invalid git folders
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Form, HTTPException, Request, Response, UploadFile, File
+from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.templating import Jinja2Templates
+from starlette.middleware.sessions import SessionMiddleware
 import zipfile
 import shutil
 import difflib
 import itertools
 import re
 import uuid # To generate unique IDs for the HTML accordion
-from fastapi.responses import HTMLResponse
-from fastapi.templating import Jinja2Templates
 from git import Repo, exc
 import markdown
 import yaml
@@ -41,6 +43,12 @@ JOBE_OUTCOME_MAP = {
 ASSIGNMENTS_DIR = "./assignments"
 REPO_URL = os.getenv("GIT_REPO_URL", DEFAULT_REPO_URL) # e.g. https://github.com/inf-ufrgs/inf01040-assignments.git
 GIT_TOKEN = os.getenv("GIT_TOKEN")   # The Secret Token
+
+# 4. SAML Configuration
+SAML_ENABLED = os.getenv("SAML_ENABLED", "false").lower() == "true"
+SAML_SP_BASE_URL = os.getenv("SAML_SP_BASE_URL", "https://jobe-web.k8s.inf.ufrgs.br")
+SAML_SP_ENTITY_ID = os.getenv("SAML_SP_ENTITY_ID", f"{SAML_SP_BASE_URL}/saml/metadata")
+SESSION_SECRET_KEY = os.getenv("SESSION_SECRET_KEY", "change-me-in-production-please")
 
 # Configure Log Level from Environment
 log_level_str = os.getenv("LOG_LEVEL", "INFO").upper()
@@ -301,30 +309,37 @@ def sync_repository():
     if LAST_UPDATED == "Never":
         should_reload = True
 
-    try:
-        repo = Repo(ASSIGNMENTS_DIR)
-        
-        # 1. Fetch the latest metadata from GitHub
-        repo.remotes.origin.fetch()
-        
-        # 2. Check if local commit matches remote commit
-        local_commit = repo.head.commit
-        remote_commit = repo.remotes.origin.refs.main.commit # Change 'main' if your default branch is 'master'
-        
-        if local_commit != remote_commit:
-            logger.info("🔄 New commits detected on GitHub! Pulling...")
+    if REPO_URL and GIT_TOKEN:
+        try:
+            repo = Repo(ASSIGNMENTS_DIR)
             
-            # Re-apply the auth URL just to be safe before pulling
-            # Construct Authenticated URL safely
-            auth_url = REPO_URL.replace("https://", f"https://{GIT_TOKEN}@")
-            if auth_url:
-                repo.remotes.origin.set_url(auth_url)
+            # 1. Fetch the latest metadata from GitHub
+            repo.remotes.origin.fetch()
             
-            repo.remotes.origin.pull()
-            should_reload = True
+            # 2. Check if local commit matches remote commit
+            local_commit = repo.head.commit
+            remote_commit = repo.remotes.origin.refs.main.commit # Change 'main' if your default branch is 'master'
             
-    except Exception as e:
-        logger.error(f"❌ Auto-sync failed: {e}")
+            if local_commit != remote_commit:
+                logger.info("🔄 New commits detected on GitHub! Pulling...")
+                
+                # Re-apply the auth URL just to be safe before pulling
+                # Construct Authenticated URL safely
+                auth_url = REPO_URL.replace("https://", f"https://{GIT_TOKEN}@")
+                if auth_url:
+                    repo.remotes.origin.set_url(auth_url)
+                
+                repo.remotes.origin.pull()
+                should_reload = True
+                
+        except Exception as e:
+            logger.error(f"❌ Auto-sync failed: {e}")
+    else:
+        # No git credentials, maybe just try to open the repo to get commit info if possible
+        try:
+            repo = Repo(ASSIGNMENTS_DIR)
+        except:
+            pass # Not a git repo, no problem, load_assignments_from_disk(None) will handle it.
 
     if should_reload:
         ASSIGNMENTS = load_assignments_from_disk(repo if 'repo' in locals() else None)
@@ -371,7 +386,10 @@ async def lifespan(app: FastAPI):
             logger.info("📥 Cloning Private Repository...")
             Repo.clone_from(auth_url, ASSIGNMENTS_DIR)
     else:
-        logger.warning("⚠️ No GIT credentials provided. Using empty assignment list.")
+        if os.path.exists(ASSIGNMENTS_DIR):
+            logger.info("📂 Assignments folder found. Using local files (no GIT credentials provided).")
+        else:
+            logger.warning("⚠️ No GIT credentials provided and assignments folder not found. App will be empty.")
     
     # Do the first load immediately
     sync_repository()
@@ -390,6 +408,7 @@ async def lifespan(app: FastAPI):
 
 # --- APP INITIALIZATION ---
 app = FastAPI(lifespan=lifespan)
+app.add_middleware(SessionMiddleware, secret_key=SESSION_SECRET_KEY)
 templates = Jinja2Templates(directory="templates")
 
 # The Wrapper to silence inputs
@@ -447,6 +466,11 @@ async def view_assignment(request: Request, assignment_id: str):
 
     lab_data = ASSIGNMENTS[assignment_id]
 
+    # Check if user is authenticated via SAML
+    saml_user = None
+    if SAML_ENABLED:
+        saml_user = request.session.get("saml_user")
+
     return templates.TemplateResponse("assignment.html", {
         "request": request,
         "assignment_id": assignment_id, # Passed to the hidden input
@@ -455,7 +479,9 @@ async def view_assignment(request: Request, assignment_id: str):
         "time_limit": lab_data.get('time_limit'),
         "memory_limit": lab_data.get('memory_limit'),
         "author": lab_data.get('author'),
-        "last_updated": lab_data.get('last_updated')
+        "last_updated": lab_data.get('last_updated'),
+        "saml_enabled": SAML_ENABLED,
+        "saml_user": saml_user
     })
 
 # 3. STUDENT SUBMISSION ROUTE
@@ -466,35 +492,54 @@ async def submit_code(
     assignment_id: str = Form(...), 
     code: str = Form(...)
 ):
-    # 1. SECURITY CHECK
-    # We strip whitespace just in case they added a space by accident
     client_ip = request.client.host
-    normalized_student_id = normalize_id(student_id)
-    if normalized_student_id not in AUTHORIZED_USERS["students"] and normalized_student_id not in AUTHORIZED_USERS["professors"]:
-        logger.warning(f"UNAUTHORIZED ATTEMPT | Student: {student_id} | IP: {client_ip}")
-        return HTMLResponse(
-            content=f"""
-            <div style="color: red; font-family: sans-serif; padding: 20px; text-align: center;">
-                <h1>🚫 Acesso Negado</h1>
-                <p>O estudante Matrícula <strong>{student_id}</strong> não tem autorização para acessar o sistema. Verifique se a matrícula está correta ou entre em contato com o professor.</p>
-                <a href="javascript: history.back()">Voltar</a>
-            </div>
-            """, 
-            status_code=403
-        )
+    display_name = None
 
-    # 2. Logging (Authorized)
-    logger.info(f"SUBMISSION | Student: {student_id} | Assignment: {assignment_id} | IP: {client_ip}")
+    # Check if using SAML authentication (sentinel value)
+    if student_id == "__saml__" and SAML_ENABLED:
+        saml_user = request.session.get("saml_user")
+        if not saml_user:
+            logger.warning(f"UNAUTHORIZED SAML ATTEMPT (no session) | IP: {client_ip}")
+            return HTMLResponse(
+                content="""
+                <div style="color: red; font-family: sans-serif; padding: 20px; text-align: center;">
+                    <h1>🚫 Sessão Expirada</h1>
+                    <p>Sua sessão SAML expirou. Por favor, faça login novamente.</p>
+                    <a href="javascript: history.back()">Voltar</a>
+                </div>
+                """,
+                status_code=403
+            )
+        student_id = saml_user["uid"]
+        display_name = saml_user.get("display_name", student_id)
+        logger.info(f"SAML SUBMISSION | User: {display_name} (uid: {student_id}) | Assignment: {assignment_id} | IP: {client_ip}")
+    else:
+        # Traditional Matrícula-based authentication
+        normalized_student_id = normalize_id(student_id)
+        if normalized_student_id not in AUTHORIZED_USERS["students"] and normalized_student_id not in AUTHORIZED_USERS["professors"]:
+            logger.warning(f"UNAUTHORIZED ATTEMPT | Student: {student_id} | IP: {client_ip}")
+            return HTMLResponse(
+                content=f"""
+                <div style="color: red; font-family: sans-serif; padding: 20px; text-align: center;">
+                    <h1>🚫 Acesso Negado</h1>
+                    <p>O estudante Matrícula <strong>{student_id}</strong> não tem autorização para acessar o sistema. Verifique se a matrícula está correta ou entre em contato com o professor.</p>
+                    <a href="javascript: history.back()">Voltar</a>
+                </div>
+                """, 
+                status_code=403
+            )
+        logger.info(f"SUBMISSION | Student: {student_id} | Assignment: {assignment_id} | IP: {client_ip}")
 
-    # 3. CALL THE HELPER
+    # CALL THE HELPER
     score, total, results = grade_submission(code, assignment_id)
 
-    # 4. RETURN RESPONSE
+    # RETURN RESPONSE
     return templates.TemplateResponse("result.html", {
         "request": request, 
         "results": results, 
         "score": f"{score}/{total} ({score/total*100:.1f}%)",
         "student_id": student_id,
+        "display_name": display_name,
         "assignment_id": assignment_id
     })
 
@@ -754,3 +799,239 @@ async def moodle_grade(
         "plagiarism": plagiarism_report,
         "assignment": ASSIGNMENTS[assignment_id]['title']
     })
+
+
+# --- SAML ROUTES ---
+def _prepare_saml_auth(request: Request, post_data: dict = None):
+    """
+    Prepares the OneLogin_Saml2_Auth object from a FastAPI request.
+    Dynamically overrides SP settings from environment variables.
+    post_data should be passed for POST endpoints (e.g. /saml/acs) since
+    python3-saml requires all request data to be present at construction time.
+    """
+    from onelogin.saml2.auth import OneLogin_Saml2_Auth
+
+    # Determine HTTPS correctly when running behind a TLS-terminating ingress/proxy.
+    # request.url.scheme reports 'http' because the ingress strips TLS before forwarding
+    # to the pod. Check X-Forwarded-Proto (set by most ingress controllers) first,
+    # then fall back to the configured SAML_SP_BASE_URL scheme.
+    forwarded_proto = request.headers.get("x-forwarded-proto", "")
+    is_https = (
+        forwarded_proto == "https"
+        or request.url.scheme == "https"
+        or SAML_SP_BASE_URL.startswith("https://")
+    )
+
+    # Build the request dict that python3-saml expects
+    url_data = {
+        "https": "on" if is_https else "off",
+        "http_host": request.headers.get("host", "localhost"),
+        "server_port": 443 if is_https else (request.url.port or 80),
+        "script_name": request.url.path,
+        "get_data": dict(request.query_params),
+        "post_data": post_data or {},
+    }
+
+    # Load base settings from the saml/ directory
+    saml_path = os.path.join(os.path.dirname(__file__), "saml")
+
+    # Load and dynamically override SP settings
+    with open(os.path.join(saml_path, "settings.json")) as f:
+        settings_data = json.load(f)
+    with open(os.path.join(saml_path, "advanced_settings.json")) as f:
+        advanced_data = json.load(f)
+
+    # Override SP URLs from environment
+    settings_data["sp"]["entityId"] = SAML_SP_ENTITY_ID
+    settings_data["sp"]["assertionConsumerService"]["url"] = f"{SAML_SP_BASE_URL}/saml/acs"
+    settings_data["sp"]["singleLogoutService"]["url"] = f"{SAML_SP_BASE_URL}/saml/sls"
+
+    # Load SP certificate and key from files if they exist
+    cert_path = os.path.join(saml_path, "certs", "sp.crt")
+    key_path = os.path.join(saml_path, "certs", "sp.key")
+    if os.path.exists(cert_path):
+        with open(cert_path) as f:
+            cert_content = f.read()
+            # Strip PEM headers for python3-saml
+            cert_content = cert_content.replace("-----BEGIN CERTIFICATE-----", "").replace("-----END CERTIFICATE-----", "").replace("\n", "")
+            settings_data["sp"]["x509cert"] = cert_content
+    if os.path.exists(key_path):
+        with open(key_path) as f:
+            key_content = f.read()
+            key_content = key_content.replace("-----BEGIN RSA PRIVATE KEY-----", "").replace("-----END RSA PRIVATE KEY-----", "")
+            key_content = key_content.replace("-----BEGIN PRIVATE KEY-----", "").replace("-----END PRIVATE KEY-----", "").replace("\n", "")
+            settings_data["sp"]["privateKey"] = key_content
+
+    # Merge settings
+    merged = {**settings_data, **advanced_data}
+
+    return OneLogin_Saml2_Auth(url_data, merged)
+
+
+# SAML Attribute OIDs from UFRGS IdP
+SAML_ATTR_UID = "urn:oid:0.9.2342.19200300.100.1.1"
+SAML_ATTR_CN = "urn:oid:2.5.4.3"
+SAML_ATTR_MAIL = "urn:oid:0.9.2342.19200300.100.1.3"
+
+
+@app.get("/saml/login")
+async def saml_login(request: Request, assignment_id: str = None):
+    """Initiates SAML SSO by redirecting the user to the UFRGS IdP."""
+    if not SAML_ENABLED:
+        raise HTTPException(status_code=404, detail="SAML authentication is not enabled")
+
+    auth = _prepare_saml_auth(request)
+
+    # Build the return URL so user comes back to their assignment after login
+    if assignment_id:
+        return_to = f"{SAML_SP_BASE_URL}/assignment/{assignment_id}"
+    else:
+        return_to = SAML_SP_BASE_URL
+
+    sso_url = auth.login(return_to=return_to)
+    return RedirectResponse(url=sso_url)
+
+
+@app.post("/saml/acs")
+async def saml_acs(request: Request):
+    """
+    Assertion Consumer Service: receives the SAML response from the IdP,
+    validates it, extracts user attributes, and stores them in the session.
+    """
+    if not SAML_ENABLED:
+        raise HTTPException(status_code=404, detail="SAML authentication is not enabled")
+
+    # Read form data FIRST, then pass it into the auth object at construction time.
+    # python3-saml requires post_data to be present in the request dict when
+    # OneLogin_Saml2_Auth is instantiated — it cannot be set as an attribute afterward.
+    form_data = await request.form()
+    auth = _prepare_saml_auth(request, post_data=dict(form_data))
+
+    auth.process_response()
+    errors = auth.get_errors()
+
+    if errors:
+        error_reason = auth.get_last_error_reason()
+        logger.error(f"SAML ACS Error: {errors} | Reason: {error_reason}")
+        return HTMLResponse(
+            content=f"""
+            <div style="color: red; font-family: sans-serif; padding: 20px; text-align: center;">
+                <h1>⚠️ Erro de Autenticação SAML</h1>
+                <p>Ocorreu um erro ao processar a autenticação: {error_reason or ', '.join(errors)}</p>
+                <a href="javascript: history.back()">Voltar</a>
+            </div>
+            """,
+            status_code=400
+        )
+
+    if not auth.is_authenticated():
+        return HTMLResponse(
+            content="""
+            <div style="color: red; font-family: sans-serif; padding: 20px; text-align: center;">
+                <h1>🚫 Autenticação Falhou</h1>
+                <p>Não foi possível autenticar com a UFRGS. Tente novamente.</p>
+                <a href="/">Início</a>
+            </div>
+            """,
+            status_code=403
+        )
+
+    # Extract attributes
+    attributes = auth.get_attributes()
+    uid = attributes.get(SAML_ATTR_UID, [None])[0]
+    display_name = attributes.get(SAML_ATTR_CN, [uid])[0]
+    mail = attributes.get(SAML_ATTR_MAIL, [None])[0]
+
+    logger.info(f"SAML LOGIN SUCCESS | uid: {uid} | name: {display_name} | mail: {mail}")
+
+    # Store user info and SAML session details in session
+    request.session["saml_user"] = {
+        "uid": uid,
+        "display_name": display_name,
+        "mail": mail,
+        "name_id": auth.get_nameid(),
+        "session_index": auth.get_session_index(),
+        "name_id_format": auth.get_nameid_format(),
+    }
+
+    # Redirect to the RelayState (the original assignment page) or home
+    relay_state = form_data.get("RelayState", "/")
+    # Security: only redirect to our own domain
+    if relay_state and relay_state.startswith(SAML_SP_BASE_URL):
+        return RedirectResponse(url=relay_state, status_code=303)
+    elif relay_state and relay_state.startswith("/"):
+        return RedirectResponse(url=relay_state, status_code=303)
+    else:
+        return RedirectResponse(url="/", status_code=303)
+
+
+@app.get("/saml/logout")
+async def saml_logout(request: Request, assignment_id: str = None):
+    """Initiates SAML Single Logout by redirecting to the IdP."""
+    if not SAML_ENABLED:
+        raise HTTPException(status_code=404, detail="SAML authentication is not enabled")
+
+    # If no SAML user in session, just redirect home
+    saml_user = request.session.get("saml_user")
+    if not saml_user:
+        return RedirectResponse(url="/")
+
+    auth = _prepare_saml_auth(request)
+    
+    # Pass the RelayState so we know where to go after the IdP logs us out
+    return_to = f"{SAML_SP_BASE_URL}/assignment/{assignment_id}" if assignment_id else SAML_SP_BASE_URL
+
+    # Initiate logout at the IdP using the stored session identifiers
+    slo_url = auth.logout(
+        name_id=saml_user.get("name_id"),
+        session_index=saml_user.get("session_index"),
+        return_to=return_to,
+        name_id_format=saml_user.get("name_id_format")
+    )
+    
+    return RedirectResponse(url=slo_url)
+
+
+@app.get("/saml/sls")
+async def saml_sls(request: Request):
+    """
+    Single Logout Service: receives the LogoutResponse from the IdP,
+    clears the local session, and redirects the user.
+    """
+    if not SAML_ENABLED:
+        raise HTTPException(status_code=404, detail="SAML authentication is not enabled")
+
+    auth = _prepare_saml_auth(request)
+    
+    url = auth.process_slo(keep_local_session=False)
+    errors = auth.get_errors()
+    
+    if errors:
+        logger.error(f"SAML SLS Error: {errors} | Reason: {auth.get_last_error_reason()}")
+
+    # Clear our local session
+    request.session.pop("saml_user", None)
+    
+    # The URL returned by process_slo is the RelayState we sent in saml_logout
+    if url and url.startswith(SAML_SP_BASE_URL):
+        return RedirectResponse(url=url)
+    
+    return RedirectResponse(url="/")
+
+
+@app.get("/saml/metadata")
+async def saml_metadata(request: Request):
+    """Returns the SP metadata XML for registration with the UFRGS IdP."""
+    if not SAML_ENABLED:
+        raise HTTPException(status_code=404, detail="SAML authentication is not enabled")
+
+    auth = _prepare_saml_auth(request)
+    settings = auth.get_settings()
+    metadata = settings.get_sp_metadata()
+    errors = settings.validate_metadata(metadata)
+
+    if errors:
+        logger.error(f"SAML Metadata validation errors: {errors}")
+        raise HTTPException(status_code=500, detail=f"Metadata validation error: {', '.join(errors)}")
+
+    return Response(content=metadata, media_type="application/xml")

@@ -1,0 +1,33 @@
+{
+    "security": {
+        "nameIdEncrypted": false,
+        "authnRequestsSigned": true,
+        "logoutRequestSigned": true,
+        "logoutResponseSigned": false,
+        "signMetadata": false,
+        "metadataValidUntil": "2126-03-25T20:00:00Z",
+        "wantMessagesSigned": false,
+        "wantAssertionsSigned": false,
+        "wantAssertionsEncrypted": false,
+        "wantNameId": false,
+        "wantNameIdEncrypted": false,
+        "wantAttributeStatement": false,
+        "requestedAuthnContext": false,
+        "relaxDestinationValidation": true,
+        "signatureAlgorithm": "http://www.w3.org/2001/04/xmldsig-more#rsa-sha256",
+        "digestAlgorithm": "http://www.w3.org/2001/04/xmlenc#sha256"
+    },
+    "contactPerson": {
+        "technical": {
+            "givenName": "Juliano Wickboldt",
+            "emailAddress": "jwickboldt@inf.ufrgs.br"
+        }
+    },
+    "organization": {
+        "en-US": {
+            "name": "INF-UFRGS",
+            "displayname": "Instituto de Informatica - UFRGS",
+            "url": "https://inf.ufrgs.br"
+        }
+    }
+}

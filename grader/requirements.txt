@@ -7,3 +7,5 @@ GitPython
 PyYAML
 markdown
 pymdown-extensions
+python3-saml
+itsdangerous

@@ -1,0 +1,9 @@
+# Exclude SP certificates from the Docker image.
+# These are sensitive files that must NEVER be baked into the image.
+# They are injected at runtime via Kubernetes Secrets mounted at /app/saml/certs/
+saml/certs/
+
+# Exclude Python cache and virtual environments
+__pycache__/
+*.py[codz]
+.venv/

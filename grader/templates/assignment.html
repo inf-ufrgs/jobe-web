@@ -103,10 +103,49 @@
 
                     <input type="hidden" name="assignment_id" value="{{ assignment_id }}">
 
+                    {% if saml_enabled and saml_user %}
+                    {# SAML authenticated user #}
+                    <div class="alert alert-success d-flex align-items-center justify-content-between mb-3"
+                        role="alert">
+                        <div>
+                            <strong>✅ Logado como:</strong> {{ saml_user.display_name }}
+                            <span class="text-muted ms-2">(Matrícula: {{ saml_user.uid }})</span>
+                        </div>
+                        <a href="/saml/logout?assignment_id={{ assignment_id }}"
+                            class="btn btn-sm btn-outline-danger">Sair</a>
+                    </div>
+                    <input type="hidden" name="student_id" value="__saml__">
+                    {% else %}
+
+                    {% if saml_enabled %}
+                    {# Dual Authentication (Side-by-Side) #}
+                    <div class="row align-items-center mb-4">
+                        <div class="col-md-5">
+                            <label class="form-label fw-bold">Matrícula:</label>
+                            <input type="text" name="student_id" class="form-control" placeholder="00123456" required>
+                        </div>
+                        <div class="col-md-2 text-center mt-3 mt-md-0">
+                            <label class="form-label fw-bold">&nbsp;<br /><br /></label>
+                            <span class="text-muted fw-bold">ou</span>
+                        </div>
+                        <div class="col-md-5 d-grid">
+                            <label class="form-label fw-bold d-none d-md-block">&nbsp;</label>
+                            <a href="/saml/login?assignment_id={{ assignment_id }}"
+                                class="btn btn-outline-primary shadow-sm">
+                                🏛️ Login com UFRGS
+                            </a>
+                        </div>
+                    </div>
+                    <hr class="mb-4">
+                    {% else %}
+                    {# Traditional Matrícula input (SAML Disabled) #}
                     <div class="mb-3">
                         <label class="form-label fw-bold">Matrícula:</label>
                         <input type="text" name="student_id" class="form-control" placeholder="00123456" required>
                     </div>
+                    {% endif %}
+
+                    {% endif %}
 
                     <div class="mb-3">
                         <label class="form-label fw-bold">Código Python:</label>
