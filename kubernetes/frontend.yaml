@@ -4,7 +4,7 @@ metadata:
   name: grader-web
   namespace: jobe-web
 spec:
-  replicas: 1 # Scale to 2 or 3 for high availability
+  replicas: 5 # Scale to 2 or 3 for high availability
   selector:
     matchLabels:
       app: grader-web
