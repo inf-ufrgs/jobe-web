@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.12] - 2026-03-25
+
+### Added
+- **UFRGS SAML Federated Login**: Integrated institutional SAML 2.0 authentication (UFRGS Identity Provider). Students can now log in using their university credentials via a new "Login com UFRGS" button (Closes #10).
+- **Dual-Authentication UI**: Redesigned the assignment submission form to support both traditional Matrícula-based and SAML-based authentication side-by-side.
+- **Single Logout (SLO)**: Implemented full SAML Single Logout flow, ensuring users are logged out from both the application and the Identity Provider when clicking "Sair".
+- **SP Metadata Generation**: Added a dynamic metadata endpoint at `/saml/metadata` to facilitate SP registration with the IdP, including automatic certificate and SLO endpoint configuration.
+
+### Fixed
+- **HTTPS Detection behind Proxies**: Improved protocol detection logic to correctly handle TLS-terminating load balancers (Ingress) by checking `X-Forwarded-Proto` headers, fixing SAML confirmation issues in cloud deployments.
+- **Metadata Expiration**: Configured a long validity period for the generated Service Provider metadata to prevent frequent integration failures.
+
 ## [1.11] - 2026-03-12
 
 ### Added
