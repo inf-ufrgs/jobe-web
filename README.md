@@ -6,10 +6,11 @@ A modern web interface for the **Jobe** server, designed for auto-grading studen
 
 ## 🚀 Features
 
+- **Federated Login (SAML)**: Integrated with UFRGS Identity Provider (IdP). Students can log in using their university ID and password.
 - **Instant Feedback**: Students get immediate results with side-by-side colored diffs for failed tests.
 - **Auto-Sync**: Automatically pulls the latest assignments and user lists from a private GitHub repository.
 - **Professor Tools**: Bulk grade submissions via direct Moodle import or ZIP files, and run built-in similarity checks (plagiarism detection).
-- **Graceful Auth**: Simple login system that uses only student/professor IDs, no passwords to remember.
+- **Dual-Authentication**: Seamlessly supports both Matrícula-based and SAML-based logins.
 - **Responsive UI**: Clean interface built with Bootstrap 5, works on mobile devices too.
 
 ---
@@ -84,6 +85,42 @@ docker run -p 8000:8000 \
 
 ---
 
+---
+
+## 🔐 SAML Authentication (Federated Login)
+
+The application supports SAML 2.0 federated login, allowing users to authenticate via the **UFRGS Identity Provider (IdP)**.
+
+### 1. Enable SAML
+Set the following environment variables:
+- `SAML_ENABLED="true"`
+- `SAML_SP_BASE_URL="https://your-app-domain.com"` (e.g., `https://jobe-web.k8s.inf.ufrgs.br`)
+- `SESSION_SECRET_KEY="your-random-secret"` (used to sign session cookies)
+
+### 2. Generate SP Certificates
+To sign requests and decrypt assertions, you need a Service Provider (SP) certificate and private key. Run the helper script:
+```bash
+./scripts/generate-sp-certs.sh
+```
+This will create `sp.crt` and `sp.key` in `grader/saml/certs/`. **Do not commit `sp.key` to Git.**
+
+### 3. Register with the IdP
+1. Start the application with `SAML_ENABLED=true`.
+2. Access the metadata endpoint at `https://your-domain.com/saml/metadata`.
+3. Save the XML and send it to the UFRGS IT department (CPD).
+
+### 4. Kubernetes Secret Setup
+Store your certificates and session secret in a Kubernetes Secret (see `kubernetes/saml-secrets.yaml` for a template):
+```bash
+# Encode your files to base64
+cat grader/saml/certs/sp.crt | base64 -w 0
+cat grader/saml/certs/sp.key | base64 -w 0
+# Create the secret (manually edit saml-secrets.yaml then apply)
+kubectl apply -f kubernetes/saml-secrets.yaml
+```
+
+---
+
 ## ☸️ Deployment (Kubernetes)
 
 Deployment files are located in the `kubernetes/` directory.
@@ -110,6 +147,9 @@ These manifests assume there is a namespace named `jobe-web` and you have write 
 | `JOBE_URL` | The REST API endpoint of your Jobe server | `http://localhost:4000/...` |
 | `GIT_REPO_URL` | URL to the assignments repository | (Required) |
 | `GIT_TOKEN` | GitHub Personal Access Token for private repos | (Required) |
+| `SAML_ENABLED` | Enable SAML authentication flow | `false` |
+| `SAML_SP_BASE_URL` | Public URL of the application (no trailing slash) | (Required for SAML) |
+| `SESSION_SECRET_KEY` | Random string for session cookie signing | (Required for SAML) |
 | `LOG_LEVEL` | Logging level (DEBUG, INFO, WARNING, ERROR) | `INFO` |
 
 ---
