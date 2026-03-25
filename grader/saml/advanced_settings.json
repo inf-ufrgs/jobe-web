@@ -5,6 +5,7 @@
         "logoutRequestSigned": true,
         "logoutResponseSigned": false,
         "signMetadata": false,
+        "metadataValidUntil": "2126-03-25T20:00:00Z",
         "wantMessagesSigned": false,
         "wantAssertionsSigned": false,
         "wantAssertionsEncrypted": false,
