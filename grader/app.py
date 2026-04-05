@@ -706,6 +706,21 @@ async def moodle_list_assignments(
     def _normalize_name(name: str) -> str:
         return re.sub(r'[^a-z0-9]', '', name.lower())
 
+    def assignment_utility_sort_key(assignment: dict) -> tuple:
+        DEFAULT_PRIORITY = 100
+        MATCH_PRIORITY = 0
+        HAS_SUBMISSION_PRIORITY = 10
+
+        if assignment["is_match"]:
+            priority = MATCH_PRIORITY
+        elif assignment["submission_count"] > 0:
+            priority = HAS_SUBMISSION_PRIORITY
+        else:
+            priority = DEFAULT_PRIORITY
+
+        return (priority, assignment["name"].lower())
+    
+
     error = None
     moodle_assignments = []
     try:
@@ -718,6 +733,9 @@ async def moodle_list_assignments(
                 ma["is_match"] = True
             else:
                 ma["is_match"] = False
+
+        # Use the utility function as the key for sorting
+        moodle_assignments.sort(key=assignment_utility_sort_key)
 
     except MoodleAPIError as e:
         error = str(e)
