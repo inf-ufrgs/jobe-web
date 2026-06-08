@@ -471,18 +471,21 @@ async def view_assignment(request: Request, assignment_id: str):
     if SAML_ENABLED:
         saml_user = request.session.get("saml_user")
 
-    return templates.TemplateResponse("assignment.html", {
-        "request": request,
-        "assignment_id": assignment_id, # Passed to the hidden input
-        "title": lab_data['title'],
-        "description_html": lab_data['description_html'],
-        "time_limit": lab_data.get('time_limit'),
-        "memory_limit": lab_data.get('memory_limit'),
-        "author": lab_data.get('author'),
-        "last_updated": lab_data.get('last_updated'),
-        "saml_enabled": SAML_ENABLED,
-        "saml_user": saml_user
-    })
+    return templates.TemplateResponse(
+        request=request,
+        name = "assignment.html", 
+        context = {
+            "assignment_id": assignment_id, # Passed to the hidden input
+            "title": lab_data['title'],
+            "description_html": lab_data['description_html'],
+            "time_limit": lab_data.get('time_limit'),
+            "memory_limit": lab_data.get('memory_limit'),
+            "author": lab_data.get('author'),
+            "last_updated": lab_data.get('last_updated'),
+            "saml_enabled": SAML_ENABLED,
+            "saml_user": saml_user
+        }
+    )
 
 # 3. STUDENT SUBMISSION ROUTE
 @app.post("/submit", response_class=HTMLResponse)
@@ -534,14 +537,17 @@ async def submit_code(
     score, total, results = grade_submission(code, assignment_id)
 
     # RETURN RESPONSE
-    return templates.TemplateResponse("result.html", {
-        "request": request, 
-        "results": results, 
-        "score": f"{score}/{total} ({score/total*100:.1f}%)",
-        "student_id": student_id,
-        "display_name": display_name,
-        "assignment_id": assignment_id
-    })
+    return templates.TemplateResponse(
+        request = request, 
+        name = "result.html", 
+        context = {
+            "results": results, 
+            "score": f"{score}/{total} ({score/total*100:.1f}%)",
+            "student_id": student_id,
+            "display_name": display_name,
+            "assignment_id": assignment_id
+        }
+    )
 
 # 4. PROFESSOR ASSIGNMENT ROUTE
 @app.get("/professor/{assignment_id}", response_class=HTMLResponse)
@@ -555,11 +561,14 @@ async def professor_upload_page(request: Request, assignment_id: str):
 
     lab_data = ASSIGNMENTS[assignment_id]
 
-    return templates.TemplateResponse("professor_upload.html", {
-        "request": request,
-        "assignment_id": assignment_id,
-        "title": lab_data['title']
-    })
+    return templates.TemplateResponse(
+        request = request,
+        name = "professor_upload.html",
+        context = {
+            "assignment_id": assignment_id,
+            "title": lab_data['title']
+        }
+    )
 
 # --- HELPER: Grade all student submissions in a directory ---
 def _grade_from_directory(temp_dir: str, assignment_id: str) -> tuple[list, list]:
@@ -659,12 +668,15 @@ async def professor_grade(
     report_data, plagiarism_report = _grade_from_directory(temp_dir, assignment_id)
     shutil.rmtree(temp_dir)
 
-    return templates.TemplateResponse("professor_report.html", {
-        "request": request,
-        "report": report_data,
-        "plagiarism": plagiarism_report,
-        "assignment": ASSIGNMENTS[assignment_id]['title']
-    })
+    return templates.TemplateResponse(
+        request = request,
+        name = "professor_report.html",
+        context = {
+            "report": report_data,
+            "plagiarism": plagiarism_report,
+            "assignment": ASSIGNMENTS[assignment_id]['title']
+        }
+    )
 
 
 # 6. MOODLE CONNECT ROUTE
@@ -675,11 +687,14 @@ async def moodle_connect_page(request: Request, assignment_id: str):
         raise HTTPException(status_code=404, detail="Assignment not found")
 
     lab_data = ASSIGNMENTS[assignment_id]
-    return templates.TemplateResponse("moodle_connect.html", {
-        "request": request,
-        "assignment_id": assignment_id,
-        "title": lab_data['title'],
-    })
+    return templates.TemplateResponse(
+        request = request,
+        name = "moodle_connect.html",
+        context = {
+            "assignment_id": assignment_id,
+            "title": lab_data['title'],
+        }
+    )
 
 
 # 7. MOODLE ASSIGNMENT LIST ROUTE
@@ -713,7 +728,7 @@ async def moodle_list_assignments(
 
         if assignment["is_match"]:
             priority = MATCH_PRIORITY
-        elif assignment["submission_count"] > 0:
+        elif assignment["submissions_count"] > 0:
             priority = HAS_SUBMISSION_PRIORITY
         else:
             priority = DEFAULT_PRIORITY
@@ -741,16 +756,19 @@ async def moodle_list_assignments(
         error = str(e)
         logger.warning(f"Moodle API error for professor {prof_id}: {e}")
 
-    return templates.TemplateResponse("moodle_assignments.html", {
-        "request": request,
-        "assignment_id": assignment_id,
-        "title": ASSIGNMENTS[assignment_id]['title'],
-        "prof_id": prof_id,
-        "moodle_token": moodle_token,
-        "course_id": course_id,
-        "moodle_assignments": moodle_assignments,
-        "error": error,
-    })
+    return templates.TemplateResponse(
+        request = request,
+        name = "moodle_assignments.html",
+        context = {
+            "assignment_id": assignment_id,
+            "title": ASSIGNMENTS[assignment_id]['title'],
+            "prof_id": prof_id,
+            "moodle_token": moodle_token,
+            "course_id": course_id,
+            "moodle_assignments": moodle_assignments,
+            "error": error,
+        }
+    )
 
 
 # 8. MOODLE GRADE ROUTE
@@ -811,12 +829,15 @@ async def moodle_grade(
         if os.path.exists(temp_dir):
             shutil.rmtree(temp_dir)
 
-    return templates.TemplateResponse("professor_report.html", {
-        "request": request,
-        "report": report_data,
-        "plagiarism": plagiarism_report,
-        "assignment": ASSIGNMENTS[assignment_id]['title']
-    })
+    return templates.TemplateResponse(
+        request = request,
+        name = "professor_report.html",
+        context = {
+            "report": report_data,
+            "plagiarism": plagiarism_report,
+            "assignment": ASSIGNMENTS[assignment_id]['title']
+        }
+    )
 
 
 # --- SAML ROUTES ---

@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.13] - 2026-05-11
+
+### Added
+- **Moodle assignment priority sorting**: Added a utility function to sort Moodle assignments by priority, improving assignment import order and selection during automated syncs.
+
 ## [1.12] - 2026-03-25
 
 ### Added
