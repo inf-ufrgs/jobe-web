@@ -765,7 +765,7 @@ async def moodle_list_assignments(
         moodle_assignments = list_course_assignments(moodle_token, course_id)
         
         # Highlight match
-        norm_task_id = _normalize_name(assignment_id)
+        norm_task_id = _normalize_name(ASSIGNMENTS[assignment_id]['title'])
         for ma in moodle_assignments:
             if norm_task_id in _normalize_name(ma["name"]):
                 ma["is_match"] = True
