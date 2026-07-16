@@ -615,7 +615,7 @@ def _grade_from_directory(temp_dir: str, assignment_id: str) -> tuple[list, list
         student_name = parts[0]
 
         # Find Python Files
-        py_files = [f for f in os.listdir(student_dir) if f.endswith(".py")]
+        py_files = [f for f in os.listdir(student_dir) if f.lower().endswith(".py")]
 
         student_status = {}
 
