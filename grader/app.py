@@ -6,7 +6,7 @@ import logging
 import shutil         # For clearing invalid git folders
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Form, HTTPException, Request, Response, UploadFile, File
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, FileResponse
 from fastapi.templating import Jinja2Templates
 from starlette.middleware.sessions import SessionMiddleware
 import zipfile
@@ -458,7 +458,11 @@ async def read_root(request: Request):
     """
 
 # 2. STUDENT ASSIGNMENT ROUTE
-@app.get("/assignment/{assignment_id}", response_class=HTMLResponse)
+@app.get("/assignment/{assignment_id}")
+async def view_assignment_redirect(assignment_id: str):
+    return RedirectResponse(url=f"/assignment/{assignment_id}/")
+
+@app.get("/assignment/{assignment_id}/", response_class=HTMLResponse)
 async def view_assignment(request: Request, assignment_id: str):
     if assignment_id not in ASSIGNMENTS:
         logger.warning(f"Student assignment not found: {assignment_id}")
@@ -486,6 +490,25 @@ async def view_assignment(request: Request, assignment_id: str):
             "saml_user": saml_user
         }
     )
+
+@app.get("/assignment/{assignment_id}/{file_path:path}")
+async def serve_assignment_file(assignment_id: str, file_path: str):
+    """Serves static files (images, files, etc.) from the assignment directory."""
+    if assignment_id not in ASSIGNMENTS:
+        raise HTTPException(status_code=404, detail="Assignment not found")
+
+    # Prevent directory traversal attacks
+    target_dir = os.path.realpath(os.path.join(ASSIGNMENTS_DIR, assignment_id))
+    full_path = os.path.realpath(os.path.join(target_dir, file_path))
+
+    if not full_path.startswith(target_dir):
+        logger.warning(f"Directory traversal attempt blocked: {file_path} for assignment {assignment_id}")
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    if not os.path.isfile(full_path):
+        raise HTTPException(status_code=404, detail="File not found")
+
+    return FileResponse(full_path)
 
 # 3. STUDENT SUBMISSION ROUTE
 @app.post("/submit", response_class=HTMLResponse)
@@ -923,7 +946,7 @@ async def saml_login(request: Request, assignment_id: str = None):
 
     # Build the return URL so user comes back to their assignment after login
     if assignment_id:
-        return_to = f"{SAML_SP_BASE_URL}/assignment/{assignment_id}"
+        return_to = f"{SAML_SP_BASE_URL}/assignment/{assignment_id}/"
     else:
         return_to = SAML_SP_BASE_URL
 
@@ -1018,7 +1041,7 @@ async def saml_logout(request: Request, assignment_id: str = None):
     auth = _prepare_saml_auth(request)
     
     # Pass the RelayState so we know where to go after the IdP logs us out
-    return_to = f"{SAML_SP_BASE_URL}/assignment/{assignment_id}" if assignment_id else SAML_SP_BASE_URL
+    return_to = f"{SAML_SP_BASE_URL}/assignment/{assignment_id}/" if assignment_id else SAML_SP_BASE_URL
 
     # Initiate logout at the IdP using the stored session identifiers
     slo_url = auth.logout(

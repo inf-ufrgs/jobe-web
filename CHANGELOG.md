@@ -2,10 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
-## [1.13] - 2026-05-11
+## [1.13] - 2026-07-16
 
 ### Added
 - **Moodle assignment priority sorting**: Added a utility function to sort Moodle assignments by priority, improving assignment import order and selection during automated syncs.
+- **Assignment static file serving**: Configured a dynamic endpoint to serve static assets (such as images) from assignment folders securely, protecting against directory traversal.
+- **Trailing slash redirection for assignments**: Enabled automatic redirection from `/assignment/{id}` to `/assignment/{id}/` to ensure relative asset URLs in assignment descriptions resolve correctly in the browser.
 
 ## [1.12] - 2026-03-25
 
